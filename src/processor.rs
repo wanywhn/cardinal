@@ -2,11 +2,11 @@ use crate::fsevent::FsEvent;
 use anyhow::{bail, Result};
 use once_cell::sync::Lazy;
 use parking_lot::Mutex;
-use std::collections::{BTreeSet, VecDeque};
+use std::collections::BTreeSet;
 use tokio::sync::mpsc::{
     self,
     error::{TryRecvError, TrySendError},
-    Receiver, Sender, UnboundedReceiver, UnboundedSender,
+    Receiver, Sender, UnboundedReceiver,
 };
 
 const FS_EVENTS_CHANNEL_LEN: usize = 1024;

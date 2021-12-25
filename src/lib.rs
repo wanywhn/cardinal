@@ -1,4 +1,5 @@
 #![deny(unsafe_op_in_unsafe_fn)]
+mod c;
 mod fsevent;
 mod fsevent_flags;
 mod fsevent_pb;
@@ -14,19 +15,14 @@ use core_foundation::{
     runloop::{kCFRunLoopDefaultMode, CFRunLoopGetCurrent, CFRunLoopRun},
     string::CFString,
 };
-use crossbeam::atomic::AtomicCell;
 use fsevent_sys::{
     kFSEventStreamCreateFlagFileEvents, kFSEventStreamCreateFlagNoDefer,
     kFSEventStreamEventIdSinceNow, FSEventStreamContext, FSEventStreamCreate,
     FSEventStreamEventFlags, FSEventStreamEventId, FSEventStreamRef,
     FSEventStreamScheduleWithRunLoop, FSEventStreamStart,
 };
-use parking_lot::Mutex;
 use runtime::runtime;
-use tokio::{
-    sync::mpsc::{self, UnboundedReceiver},
-    task,
-};
+use tokio::sync::mpsc::{self, UnboundedReceiver};
 
 use std::{ffi::c_void, ptr, slice};
 
@@ -110,18 +106,7 @@ fn spawn_processor(receiver: UnboundedReceiver<Vec<FsEvent>>) {
     runtime().spawn(processor::processor(receiver));
 }
 
-#[no_mangle]
-pub extern "C" fn init_sdk() {
+fn init_sdk() {
     let receiver = spawn_watcher();
     spawn_processor(receiver);
-}
-
-#[no_mangle]
-pub extern "C" fn get_events(
-    context: *const i8,
-    callback: Option<unsafe extern "C" fn(*const i8, *const i8)>,
-) {
-    let events = processor::take_fs_events();
-    let bytes = fsevent::write_events_to_bytes(&events);
-    callback.map(|c| unsafe { c(context, bytes.as_ptr() as _) });
 }
