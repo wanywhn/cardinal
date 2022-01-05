@@ -119,14 +119,16 @@ impl EventId {
     }
 }
 
-fn spawn_watcher(since: FSEventStreamEventId) -> Receiver<Vec<FsEvent>> {
+fn spawn_watcher(since: FSEventStreamEventId) -> Receiver<FsEvent> {
     let (sender, receiver) = channel::unbounded();
     runtime().spawn_blocking(move || {
         EventStream::new(
             vec!["/".into()],
             since,
             Box::new(move |events| {
-                sender.send(events).unwrap();
+                for event in events {
+                    sender.send(event).unwrap();
+                }
             }),
         )
         .watch()
@@ -135,7 +137,7 @@ fn spawn_watcher(since: FSEventStreamEventId) -> Receiver<Vec<FsEvent>> {
     receiver
 }
 
-fn spawn_processor(since: FSEventStreamEventId, receiver: Receiver<Vec<FsEvent>>) {
+fn spawn_processor(since: FSEventStreamEventId, receiver: Receiver<FsEvent>) {
     if let Err(_) = processor::PROCESSOR.set(Processor::new(since, receiver)) {
         panic!("Multiple initialization");
     }

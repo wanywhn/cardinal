@@ -14,7 +14,7 @@ pub struct Processor {
     /// Bounded fs events FIFO pipe for displaying.
     limited_fs_events: (Sender<FsEvent>, Receiver<FsEvent>),
     /// Raw fs events receiver channel from system.
-    events_receiver: Receiver<Vec<FsEvent>>,
+    events_receiver: Receiver<FsEvent>,
     /// The event id all the events begins with.
     since: FSEventStreamEventId,
     /// Paths of current file system.
@@ -23,7 +23,7 @@ pub struct Processor {
 
 impl Processor {
     const FS_EVENTS_CHANNEL_LEN: usize = 1024;
-    pub fn new(since: FSEventStreamEventId, events_receiver: Receiver<Vec<FsEvent>>) -> Self {
+    pub fn new(since: FSEventStreamEventId, events_receiver: Receiver<FsEvent>) -> Self {
         let (sender, receiver) = channel::bounded(Self::FS_EVENTS_CHANNEL_LEN);
         Self {
             limited_fs_events: (sender, receiver),
@@ -68,15 +68,13 @@ impl Processor {
     }
 
     pub fn process(&self) -> Result<()> {
-        let events = self
+        let event = self
             .events_receiver
             .recv()
             .context("System events channel closed.")?;
-        for event in events {
-            self.core_paths.lock().insert(event.path.clone());
-            // Provide raw fs event.
-            self.fill_fs_event(event).context("fill fs event failed.")?;
-        }
+        self.core_paths.lock().insert(event.path.clone());
+        // Provide raw fs event.
+        self.fill_fs_event(event).context("fill fs event failed.")?;
         Ok(())
     }
 }
