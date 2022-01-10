@@ -4,6 +4,8 @@ The open-source and cross-platform Everything.
 
 The event processor is sync and it uses dedicated threads.
 
+Only paths are scanned and stored since fetching metadata is slow.
+
 ```
 cbindgen --config cbindgen.toml --crate cardinal --output cardinal.h
 ```

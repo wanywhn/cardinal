@@ -54,6 +54,7 @@ impl Processor {
         Ok(())
     }
 
+    /// Take out fs_event cache of current processor.
     fn take_fs_events(&self) -> Vec<FsEvent> {
         // Due to non atomic channel recv, double the size of possible receiving vec.
         let max_take_num = 2 * self.limited_fs_events.0.len();
@@ -67,6 +68,7 @@ impl Processor {
         fs_events
     }
 
+    /// Non-blocking process a event.
     pub fn process(&self) -> Result<()> {
         let event = self
             .events_receiver
@@ -79,8 +81,8 @@ impl Processor {
     }
 }
 
-/// Get raw fs events from processor. Capacity is limited due to the memory
-/// pressure. So only the first few events are provided.
+/// Get raw fs events from global processor. Capacity is limited due to the
+/// memory pressure, so only the first few(currently 1024) events will be provided.
 pub fn take_fs_events() -> Vec<FsEvent> {
     PROCESSOR
         .get()
