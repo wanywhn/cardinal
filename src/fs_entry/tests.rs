@@ -30,6 +30,217 @@ fn compare_test_entry(a: impl Borrow<DiskEntry>, b: impl Borrow<DiskEntry>) {
         .for_each(|(a, b)| compare_test_entry(a, b))
 }
 
+fn complex_entry(path: &Path) -> DiskEntry {
+    DiskEntry {
+        name: p2b(path).to_vec(),
+        metadata: Some(Metadata {
+            file_type: FileType::Dir,
+            ..Default::default()
+        }),
+        entries: vec![
+            DiskEntry {
+                name: b"afolder".to_vec(),
+                metadata: Some(Metadata {
+                    file_type: FileType::Dir,
+                    ..Default::default()
+                }),
+                entries: vec![DiskEntry {
+                    name: b"hello.txt".to_vec(),
+                    metadata: Some(Metadata {
+                        file_type: FileType::File,
+                        len: 666,
+                        ..Default::default()
+                    }),
+                    entries: Vec::new(),
+                }],
+            },
+            DiskEntry {
+                name: b"233.txt".to_vec(),
+                metadata: Some(Metadata {
+                    file_type: FileType::File,
+                    len: 233,
+                    ..Default::default()
+                }),
+                entries: Vec::new(),
+            },
+            DiskEntry {
+                name: "445.txt".into(),
+                metadata: Some(Metadata {
+                    file_type: FileType::File,
+                    len: 445,
+                    ..Default::default()
+                }),
+                entries: Vec::new(),
+            },
+            DiskEntry {
+                name: "heck.txt".into(),
+                metadata: Some(Metadata {
+                    file_type: FileType::File,
+                    len: 0,
+                    ..Default::default()
+                }),
+                entries: Vec::new(),
+            },
+            DiskEntry {
+                name: "src".into(),
+                metadata: Some(Metadata {
+                    file_type: FileType::Dir,
+                    ..Default::default()
+                }),
+                entries: vec![DiskEntry {
+                    name: "template".into(),
+                    metadata: Some(Metadata {
+                        file_type: FileType::Dir,
+                        ..Default::default()
+                    }),
+                    entries: vec![DiskEntry {
+                        name: "hello.java".into(),
+                        metadata: Some(Metadata {
+                            file_type: FileType::File,
+                            len: 514,
+                            ..Default::default()
+                        }),
+                        entries: Vec::new(),
+                    }],
+                }],
+            },
+        ],
+    }
+}
+
+fn apply_complex_entry(path: &Path) {
+    fs::create_dir_all(path.join("afolder")).unwrap();
+    fs::write(path.join("afolder/hello.txt"), vec![42; 666]).unwrap();
+    fs::write(path.join("233.txt"), vec![42; 233]).unwrap();
+    fs::write(path.join("445.txt"), vec![42; 445]).unwrap();
+    fs::write(path.join("heck.txt"), vec![0; 0]).unwrap();
+    fs::create_dir_all(path.join("src/template")).unwrap();
+    fs::write(path.join("src/template/hello.java"), vec![42; 514]).unwrap();
+}
+
+fn full_entry(path: &Path) -> DiskEntry {
+    DiskEntry {
+        name: p2b(path).to_vec(),
+        metadata: Some(Metadata {
+            file_type: FileType::Dir,
+            ..Default::default()
+        }),
+        entries: vec![
+            DiskEntry {
+                name: b"afolder".to_vec(),
+                metadata: Some(Metadata {
+                    file_type: FileType::Dir,
+                    ..Default::default()
+                }),
+                entries: vec![
+                    DiskEntry {
+                        name: b"foo".to_vec(),
+                        metadata: Some(Metadata {
+                            file_type: FileType::File,
+                            len: 666,
+                            ..Default::default()
+                        }),
+                        entries: Vec::new(),
+                    },
+                    DiskEntry {
+                        name: b"bar".to_vec(),
+                        metadata: Some(Metadata {
+                            file_type: FileType::File,
+                            len: 89,
+                            ..Default::default()
+                        }),
+                        entries: Vec::new(),
+                    },
+                ],
+            },
+            DiskEntry {
+                name: b"bfolder".to_vec(),
+                metadata: Some(Metadata {
+                    file_type: FileType::Dir,
+                    ..Default::default()
+                }),
+                entries: vec![
+                    DiskEntry {
+                        name: b"cfolder".to_vec(),
+                        metadata: Some(Metadata {
+                            file_type: FileType::Dir,
+                            ..Default::default()
+                        }),
+                        entries: vec![DiskEntry {
+                            name: b"another".to_vec(),
+                            metadata: Some(Metadata {
+                                file_type: FileType::File,
+                                len: 0,
+                                ..Default::default()
+                            }),
+                            entries: Vec::new(),
+                        }],
+                    },
+                    DiskEntry {
+                        name: b"foo".to_vec(),
+                        metadata: Some(Metadata {
+                            file_type: FileType::File,
+                            len: 11,
+                            ..Default::default()
+                        }),
+                        entries: Vec::new(),
+                    },
+                    DiskEntry {
+                        name: b"bar".to_vec(),
+                        metadata: Some(Metadata {
+                            file_type: FileType::File,
+                            len: 0,
+                            ..Default::default()
+                        }),
+                        entries: Vec::new(),
+                    },
+                ],
+            },
+            DiskEntry {
+                name: b"abc".to_vec(),
+                metadata: Some(Metadata {
+                    file_type: FileType::File,
+                    len: 233,
+                    ..Default::default()
+                }),
+                entries: Vec::new(),
+            },
+            DiskEntry {
+                name: "ldm".into(),
+                metadata: Some(Metadata {
+                    file_type: FileType::File,
+                    len: 288,
+                    ..Default::default()
+                }),
+                entries: Vec::new(),
+            },
+            DiskEntry {
+                name: "vvv".into(),
+                metadata: Some(Metadata {
+                    file_type: FileType::File,
+                    len: 12,
+                    ..Default::default()
+                }),
+                entries: Vec::new(),
+            },
+        ],
+    }
+}
+
+fn apply_full_entry(path: &Path) {
+    fs::create_dir_all(path.join("afolder")).unwrap();
+    fs::create_dir_all(path.join("bfolder")).unwrap();
+    fs::create_dir_all(path.join("bfolder/cfolder")).unwrap();
+    fs::write(path.join("abc"), vec![42; 233]).unwrap();
+    fs::write(path.join("ldm"), vec![42; 288]).unwrap();
+    fs::write(path.join("vvv"), vec![42; 12]).unwrap();
+    fs::write(path.join("afolder/foo"), vec![42; 666]).unwrap();
+    fs::write(path.join("afolder/bar"), vec![42; 89]).unwrap();
+    fs::write(path.join("bfolder/foo"), vec![42; 11]).unwrap();
+    File::create(path.join("bfolder/bar")).unwrap();
+    File::create(path.join("bfolder/cfolder/another")).unwrap();
+}
+
 impl Default for Metadata {
     fn default() -> Self {
         Self {
@@ -42,6 +253,7 @@ impl Default for Metadata {
         }
     }
 }
+
 #[test]
 fn entry_from_empty_folder() {
     let tempdir = TempDir::new().unwrap();
@@ -83,222 +295,18 @@ fn entry_from_single_file() {
 
 #[test]
 fn test_complex_entry_scanner() {
-    fn complex_entry(path: &Path) -> DiskEntry {
-        DiskEntry {
-            name: p2b(path).to_vec(),
-            metadata: Some(Metadata {
-                file_type: FileType::Dir,
-                ..Default::default()
-            }),
-            entries: vec![
-                DiskEntry {
-                    name: b"afolder".to_vec(),
-                    metadata: Some(Metadata {
-                        file_type: FileType::Dir,
-                        ..Default::default()
-                    }),
-                    entries: vec![DiskEntry {
-                        name: b"hello.txt".to_vec(),
-                        metadata: Some(Metadata {
-                            file_type: FileType::File,
-                            len: 666,
-                            ..Default::default()
-                        }),
-                        entries: Vec::new(),
-                    }],
-                },
-                DiskEntry {
-                    name: b"233.txt".to_vec(),
-                    metadata: Some(Metadata {
-                        file_type: FileType::File,
-                        len: 233,
-                        ..Default::default()
-                    }),
-                    entries: Vec::new(),
-                },
-                DiskEntry {
-                    name: "445.txt".into(),
-                    metadata: Some(Metadata {
-                        file_type: FileType::File,
-                        len: 445,
-                        ..Default::default()
-                    }),
-                    entries: Vec::new(),
-                },
-                DiskEntry {
-                    name: "heck.txt".into(),
-                    metadata: Some(Metadata {
-                        file_type: FileType::File,
-                        len: 0,
-                        ..Default::default()
-                    }),
-                    entries: Vec::new(),
-                },
-                DiskEntry {
-                    name: "src".into(),
-                    metadata: Some(Metadata {
-                        file_type: FileType::Dir,
-                        ..Default::default()
-                    }),
-                    entries: vec![DiskEntry {
-                        name: "template".into(),
-                        metadata: Some(Metadata {
-                            file_type: FileType::Dir,
-                            ..Default::default()
-                        }),
-                        entries: vec![DiskEntry {
-                            name: "hello.java".into(),
-                            metadata: Some(Metadata {
-                                file_type: FileType::File,
-                                len: 514,
-                                ..Default::default()
-                            }),
-                            entries: Vec::new(),
-                        }],
-                    }],
-                },
-            ],
-        }
-    }
-
     let tempdir = TempDir::new().unwrap();
-    let path = &tempdir.path();
-    fs::create_dir_all(path.join("afolder")).unwrap();
-    fs::write(path.join("afolder/hello.txt"), vec![42; 666]).unwrap();
-    fs::write(path.join("233.txt"), vec![42; 233]).unwrap();
-    fs::write(path.join("445.txt"), vec![42; 445]).unwrap();
-    fs::write(path.join("heck.txt"), vec![0; 0]).unwrap();
-    fs::create_dir_all(path.join("src/template")).unwrap();
-    fs::write(path.join("src/template/hello.java"), vec![42; 514]).unwrap();
-
+    let path = tempdir.path();
+    apply_complex_entry(path);
     let entry = DiskEntry::from_fs(path);
     compare_test_entry(entry, complex_entry(path));
 }
 
 #[test]
 fn entry_from_full_folder() {
-    fn full_entry(path: &Path) -> DiskEntry {
-        DiskEntry {
-            name: p2b(path).to_vec(),
-            metadata: Some(Metadata {
-                file_type: FileType::Dir,
-                ..Default::default()
-            }),
-            entries: vec![
-                DiskEntry {
-                    name: b"afolder".to_vec(),
-                    metadata: Some(Metadata {
-                        file_type: FileType::Dir,
-                        ..Default::default()
-                    }),
-                    entries: vec![
-                        DiskEntry {
-                            name: b"foo".to_vec(),
-                            metadata: Some(Metadata {
-                                file_type: FileType::File,
-                                len: 666,
-                                ..Default::default()
-                            }),
-                            entries: Vec::new(),
-                        },
-                        DiskEntry {
-                            name: b"bar".to_vec(),
-                            metadata: Some(Metadata {
-                                file_type: FileType::File,
-                                len: 89,
-                                ..Default::default()
-                            }),
-                            entries: Vec::new(),
-                        },
-                    ],
-                },
-                DiskEntry {
-                    name: b"bfolder".to_vec(),
-                    metadata: Some(Metadata {
-                        file_type: FileType::Dir,
-                        ..Default::default()
-                    }),
-                    entries: vec![
-                        DiskEntry {
-                            name: b"cfolder".to_vec(),
-                            metadata: Some(Metadata {
-                                file_type: FileType::Dir,
-                                ..Default::default()
-                            }),
-                            entries: vec![DiskEntry {
-                                name: b"another".to_vec(),
-                                metadata: Some(Metadata {
-                                    file_type: FileType::File,
-                                    len: 0,
-                                    ..Default::default()
-                                }),
-                                entries: Vec::new(),
-                            }],
-                        },
-                        DiskEntry {
-                            name: b"foo".to_vec(),
-                            metadata: Some(Metadata {
-                                file_type: FileType::File,
-                                len: 11,
-                                ..Default::default()
-                            }),
-                            entries: Vec::new(),
-                        },
-                        DiskEntry {
-                            name: b"bar".to_vec(),
-                            metadata: Some(Metadata {
-                                file_type: FileType::File,
-                                len: 0,
-                                ..Default::default()
-                            }),
-                            entries: Vec::new(),
-                        },
-                    ],
-                },
-                DiskEntry {
-                    name: b"abc".to_vec(),
-                    metadata: Some(Metadata {
-                        file_type: FileType::File,
-                        len: 233,
-                        ..Default::default()
-                    }),
-                    entries: Vec::new(),
-                },
-                DiskEntry {
-                    name: "ldm".into(),
-                    metadata: Some(Metadata {
-                        file_type: FileType::File,
-                        len: 288,
-                        ..Default::default()
-                    }),
-                    entries: Vec::new(),
-                },
-                DiskEntry {
-                    name: "vvv".into(),
-                    metadata: Some(Metadata {
-                        file_type: FileType::File,
-                        len: 12,
-                        ..Default::default()
-                    }),
-                    entries: Vec::new(),
-                },
-            ],
-        }
-    }
-
     let tempdir = TempDir::new().unwrap();
-    let path = &tempdir.path();
-    fs::create_dir_all(path.join("afolder")).unwrap();
-    fs::create_dir_all(path.join("bfolder")).unwrap();
-    fs::create_dir_all(path.join("bfolder/cfolder")).unwrap();
-    fs::write(path.join("abc"), vec![42; 233]).unwrap();
-    fs::write(path.join("ldm"), vec![42; 288]).unwrap();
-    fs::write(path.join("vvv"), vec![42; 12]).unwrap();
-    fs::write(path.join("afolder/foo"), vec![42; 666]).unwrap();
-    fs::write(path.join("afolder/bar"), vec![42; 89]).unwrap();
-    fs::write(path.join("bfolder/foo"), vec![42; 11]).unwrap();
-    File::create(path.join("bfolder/bar")).unwrap();
-    File::create(path.join("bfolder/cfolder/another")).unwrap();
+    let path = tempdir.path();
+    apply_full_entry(path);
     let entry = DiskEntry::from_fs(path);
     compare_test_entry(entry, full_entry(path));
 }
