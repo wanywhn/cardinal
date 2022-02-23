@@ -24,9 +24,6 @@ pub struct Processor {
 
     /// Bounded fs events FIFO pipe for displaying.
     limited_fs_events: (Sender<FsEvent>, Receiver<FsEvent>),
-    /// The event id all the events begins with.
-    // TODO(ldm0) is this really needed?
-    event_id: EventId,
     /// File system Database .
     ///
     /// It's initialized before event processing.
@@ -36,12 +33,11 @@ pub struct Processor {
 
 impl Processor {
     const FS_EVENTS_CHANNEL_LEN: usize = 1024;
-    pub fn new(event_id: EventId, events_receiver: Receiver<FsEvent>) -> Self {
+    pub fn new(events_receiver: Receiver<FsEvent>) -> Self {
         let (sender, receiver) = channel::bounded(Self::FS_EVENTS_CHANNEL_LEN);
         Self {
             limited_fs_events: (sender, receiver),
             events_receiver,
-            event_id,
             database: Mutex::new(None),
         }
     }
@@ -104,27 +100,22 @@ impl Processor {
         Ok(())
     }
 
-    pub fn get_db(&self) -> Result<Database> {
-        let db = match Database::from_fs(Path::new(DB_PATH)) {
-            Ok(x) => x,
-            Err(error) => {
-                info!(?error, "Get db failed, try scanning.");
-                let mut partial_db = PartialDatabase::scan_fs();
-                info!("Fs scanning completes.");
-                while let Ok(event) = self.events_receiver.try_recv() {
-                    partial_db.merge(&event);
-                }
-                info!("Database construction completes.");
-                partial_db.complete_merge(utils::current_timestamp())
-            }
-        };
+    pub fn get_db_from_fs(&self) -> Result<Database> {
+        info!("fs scanning starts.");
+        let mut partial_db = PartialDatabase::scan_fs();
+        info!("fs scanning completes.");
+        while let Ok(event) = self.events_receiver.try_recv() {
+            partial_db.merge(&event);
+        }
+        info!("Database construction completes.");
+        let db = partial_db.complete_merge();
         Ok(db)
     }
 
     pub fn block_on(&self, database: Option<Database>) -> Result<()> {
         let database = match database {
             Some(x) => x,
-            None => self.get_db().context("Get db failed.")?,
+            None => self.get_db_from_fs().context("Get db failed.")?,
         };
         *self.database.lock() = Some(database);
         loop {

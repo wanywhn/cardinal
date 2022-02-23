@@ -12,6 +12,10 @@ cbindgen --config cbindgen.toml --crate cardinal --output cardinal.h
 cargo run --release --example tree
 ```
 
+TODO: 
+
+[] merge should check access(create) time and event time.(however it's difficult on macOS since we have no way to get timestamp of a fsevent, maybe double check if it's present or not on merging?).
+
 Native GUI，cross platform core.
 Compressed BTree file system data on saved.
 

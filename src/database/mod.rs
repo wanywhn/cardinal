@@ -1,5 +1,5 @@
 use crate::fs_entry::DiskEntry;
-use crate::fsevent::FsEvent;
+use crate::fsevent::{EventId, FsEvent};
 
 use anyhow::{Context, Result};
 use bincode::{Decode, Encode};
@@ -14,7 +14,7 @@ use tracing::{info, instrument};
 #[derive(Decode, Encode)]
 pub struct Database {
     /// The snapshot time of this file system tree.
-    time: i64,
+    time: EventId,
     /// Snapshot of the file system tree.
     fs_entry: DiskEntry,
 }
@@ -37,7 +37,14 @@ impl Database {
     }
 
     pub fn merge(&mut self, event: &FsEvent) {
+        assert!(self.time.since < event.id);
+        self.time = EventId::now_with_id(event.id);
         self.fs_entry.merge(event)
+    }
+
+    /// Return event_id of the last merged event.
+    pub fn last_event_id(&self) -> u64 {
+        self.time.since
     }
 }
 
@@ -48,7 +55,7 @@ impl Database {
 /// current time) into the file system.
 pub struct PartialDatabase {
     /// The time starting to scan this file system tree.
-    create_time: i64,
+    time: EventId,
     /// Snapshot of the file system tree.
     fs_entry: DiskEntry,
 }
@@ -56,29 +63,31 @@ pub struct PartialDatabase {
 impl PartialDatabase {
     /// Scan the hierarchy from file system.
     pub fn scan_fs() -> Self {
-        let create_time = crate::utils::current_timestamp();
-        info!(create_time, "The create time of fs scanning");
+        let start_time = EventId::now();
+        info!(?start_time, "The start time of fs scanning");
         let fs_entry = DiskEntry::from_fs(Path::new("/"));
         Self {
-            create_time,
+            time: start_time,
             fs_entry,
         }
     }
 
     pub fn merge(&mut self, event: &FsEvent) {
+        info!(?event, "Merge event into partial db");
+        assert!(self.time.since < event.id);
+        self.time = EventId::now_with_id(event.id);
         self.fs_entry.merge(event)
     }
 
     /// Complete modification merging. Convert self into a serializable database.
     /// `time` is the time of last_fs_event.
-    pub fn complete_merge(self, time: i64) -> Database {
+    pub fn complete_merge(self) -> Database {
         info!(
-            create_time = self.create_time,
-            merge_complete_time = time,
+            merge_complete_time = ?self.time,
             "Merging fs events into scanned result completes"
         );
         Database {
-            time,
+            time: self.time,
             fs_entry: self.fs_entry,
         }
     }

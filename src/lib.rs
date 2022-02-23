@@ -11,7 +11,6 @@ mod utils;
 pub use c::*;
 use consts::DB_PATH;
 use database::Database;
-use fsevent::EventId;
 use fsevent::FsEvent;
 pub use processor::take_fs_events;
 use processor::Processor;
@@ -138,13 +137,9 @@ fn spawn_event_watcher(since: FSEventStreamEventId) -> Receiver<FsEvent> {
     receiver
 }
 
-fn spawn_event_processor(
-    database: Option<Database>,
-    event_id: EventId,
-    receiver: Receiver<FsEvent>,
-) -> Result<()> {
+fn spawn_event_processor(database: Option<Database>, receiver: Receiver<FsEvent>) -> Result<()> {
     processor::PROCESSOR
-        .set(Processor::new(event_id, receiver))
+        .set(Processor::new(receiver))
         .map_err(|_| anyhow!("Multiple initialization"))?;
     // unwrap is legal here since processor is always init.
     runtime().spawn_blocking(|| processor::PROCESSOR.get().unwrap().block_on(database));
@@ -173,16 +168,23 @@ pub fn close_sdk_facade() {
 }
 
 fn init_sdk() -> Result<()> {
-    let database = Database::from_fs(Path::new(DB_PATH));
-    if let Err(error) = &database {
-        info!(?error, "database not found");
-    }
-    let database = database.ok();
-    let event_id = EventId::now();
+    let database = {
+        let database = Database::from_fs(Path::new(DB_PATH));
+        if let Err(error) = &database {
+            info!(?error, "database not found");
+        }
+        database.ok()
+    };
+
+    let watch_event_since = match database.as_ref() {
+        Some(x) => x.last_event_id(),
+        None => utils::current_event_id(),
+    };
+
     // A global event watcher spawned on a dedicated thread.
-    let receiver = spawn_event_watcher(event_id.since);
+    let receiver = spawn_event_watcher(watch_event_since);
     // A global event processor spawned on a dedicated thread.
-    spawn_event_processor(database, event_id, receiver).context("spawn event processor failed")?;
+    spawn_event_processor(database, receiver).context("spawn event processor failed")?;
     Ok(())
 }
 
