@@ -68,7 +68,7 @@ fn inner(prefix: &Path, entry: &DiskEntry, output: &mut ReadableDatabase) {
     output
         .nodes
         .push((prefix.clone(), entry.metadata.as_ref().map(Into::into)));
-    for entry in entry.entries.iter() {
+    for (name, entry) in entry.entries.iter() {
         inner(&prefix, entry, output);
     }
 }
