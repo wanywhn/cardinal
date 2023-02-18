@@ -1,7 +1,7 @@
 // @generated automatically by Diesel CLI.
 
 diesel::table! {
-    rows (the_path) {
+    dir_entrys (the_path) {
         the_path -> Binary,
         the_meta -> Binary,
     }
