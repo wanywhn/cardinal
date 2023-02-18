@@ -1,8 +1,9 @@
+use crate::consts::CONFIG;
+use crate::models::DiskEntryRaw;
 use bincode::{Decode, Encode};
+use pathbytes::{b2p, p2b};
 use std::fs;
 use std::{path::PathBuf, time::SystemTime};
-
-use crate::models::DiskEntryRaw;
 
 #[derive(Encode, Decode, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Debug)]
 pub enum FileType {
@@ -56,16 +57,12 @@ pub struct DiskEntry {
     pub meta: Metadata,
 }
 
-const CONFIG: bincode::config::Configuration = bincode::config::standard();
-
 impl TryFrom<DiskEntryRaw> for DiskEntry {
     type Error = bincode::error::DecodeError;
     fn try_from(entry: DiskEntryRaw) -> Result<Self, Self::Error> {
-        use std::ffi::OsString;
-        use std::os::unix::ffi::OsStringExt;
         let (meta, _) = bincode::decode_from_slice(&entry.the_meta, CONFIG)?;
         Ok(Self {
-            path: OsString::from_vec(entry.the_path).into(),
+            path: b2p(&entry.the_path).to_path_buf(),
             meta,
         })
     }
@@ -74,10 +71,9 @@ impl TryFrom<DiskEntryRaw> for DiskEntry {
 impl TryFrom<DiskEntry> for DiskEntryRaw {
     type Error = bincode::error::EncodeError;
     fn try_from(entry: DiskEntry) -> Result<Self, Self::Error> {
-        use std::os::unix::ffi::OsStringExt;
         let the_meta = bincode::encode_to_vec(&entry.meta, CONFIG)?;
         Ok(Self {
-            the_path: entry.path.into_os_string().into_vec(),
+            the_path: p2b(&entry.path).to_vec(),
             the_meta,
         })
     }
