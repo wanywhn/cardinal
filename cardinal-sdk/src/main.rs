@@ -3,6 +3,7 @@ mod consts;
 mod disk_entry;
 mod fs_visitor;
 mod fsevent;
+mod event_stream;
 mod models;
 mod schema;
 mod utils;
@@ -15,7 +16,9 @@ use crossbeam_channel::bounded;
 use diesel::connection::SimpleConnection;
 use diesel::prelude::*;
 use diesel_migrations::MigrationHarness;
+use fsevent::EventFlag;
 use fsevent::EventId;
+use fsevent::FsEvent;
 use models::DbMeta;
 use models::DiskEntryRaw;
 use std::time::Instant;
@@ -23,7 +26,7 @@ use tracing::info;
 
 const DATABASE_URL: &str = std::env!("DATABASE_URL");
 
-fn scan_fs(conn: &mut CardinalDbConnection) -> Result<()> {
+fn snapshot_fs(conn: &mut CardinalDbConnection) -> Result<()> {
     let (raw_entry_sender, raw_entry_receiver) = bounded(MAX_RAW_ENTRY_COUNT);
 
     std::thread::spawn(move || {
@@ -159,7 +162,7 @@ impl Database {
                 info!(?e, "Event id fetching failed:");
                 // scan_fs needs a lot of time, so event id should be gotten before it.
                 let new_event_id = EventId::now();
-                scan_fs(&mut conn).context("Scan fs failed.")?;
+                snapshot_fs(&mut conn).context("Scan fs failed.")?;
                 conn.save_event_id(&new_event_id)
                     .context("Save current event id failed")?;
                 new_event_id
@@ -169,12 +172,25 @@ impl Database {
         info!(?event_id, "The start event id");
         Ok(Self { event_id, conn })
     }
+
+    pub fn merge_event(&self, fs_event: FsEvent) {
+        match fs_event.flag {
+            EventFlag::Create => {}
+            EventFlag::Delete => {}
+            EventFlag::Modify => {}
+        }
+    }
 }
 
 fn main() {
     tracing_subscriber::fmt().with_env_filter("debug").init();
     let _ = std::fs::remove_file(DATABASE_URL);
     let db = Database::from_fs().unwrap();
+    let receiver = event_stream::spawn_event_watcher(db.event_id.since);
+    for fs_event in receiver.iter() {
+        dbg!(&fs_event);
+        db.merge_event(fs_event);
+    }
 }
 
 /*

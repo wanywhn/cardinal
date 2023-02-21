@@ -104,6 +104,7 @@ dependencies = [
  "anyhow",
  "bincode",
  "bitflags",
+ "core-foundation",
  "crossbeam-channel",
  "diesel",
  "diesel_migrations",
