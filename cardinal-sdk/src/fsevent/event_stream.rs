@@ -59,19 +59,19 @@ impl EventStream {
 
         let paths: Vec<_> = paths.iter().map(|&x| CFString::new(x)).collect();
         let paths = CFArray::from_CFTypes(&paths);
-        let context = Box::leak(Box::new(FSEventStreamContext {
+        let context = FSEventStreamContext {
             version: 0,
             info: Box::leak(Box::new(callback)) as *mut _ as *mut _,
             retain: None,
             release: Some(drop_callback),
             copy_description: None,
-        }));
+        };
 
         let stream: FSEventStreamRef = unsafe {
             FSEventStreamCreate(
                 ptr::null_mut(),
                 raw_callback,
-                context,
+                &context,
                 paths.as_concrete_TypeRef() as _,
                 since_event_id,
                 latency,
