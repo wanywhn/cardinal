@@ -1,15 +1,18 @@
 #[cfg(test)]
 mod tests;
 
-use crate::fs_entry::DiskEntry;
-use crate::fsevent::{EventId, FsEvent};
-
+use crate::{
+    fs_entry::DiskEntry,
+    fsevent::{EventId, FsEvent},
+};
 use anyhow::{Context, Result};
 use bincode::{Decode, Encode};
 use serde::{Deserialize, Serialize};
-use std::fs::File;
-use std::io::BufWriter;
-use std::{io::BufReader, path::Path};
+use std::{
+    fs::File,
+    io::{BufReader, BufWriter},
+    path::Path,
+};
 use tracing::info;
 
 /// The overall database of Cardinal.

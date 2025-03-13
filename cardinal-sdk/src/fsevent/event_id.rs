@@ -1,9 +1,7 @@
 use crate::utils;
-use bincode::Decode;
-use bincode::Encode;
+use bincode::{Decode, Encode};
 use fsevent_sys::FSEventStreamEventId;
-use serde::Deserialize;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 /// A event id for event ordering.
 #[derive(

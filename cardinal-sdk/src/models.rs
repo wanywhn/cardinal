@@ -1,5 +1,4 @@
-use crate::schema::db_meta;
-use crate::schema::dir_entrys;
+use crate::schema::{db_meta, dir_entrys};
 use diesel::Insertable;
 
 #[derive(Clone, Insertable)]

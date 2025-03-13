@@ -1,7 +1,6 @@
 use crate::fsevent::FsEvent;
 use anyhow::{Result, bail};
-use core_foundation::base::TCFType;
-use core_foundation::{array::CFArray, string::CFString};
+use core_foundation::{array::CFArray, base::TCFType, string::CFString};
 use dispatch2::ffi::{DISPATCH_QUEUE_SERIAL, dispatch_queue_create};
 use fsevent_sys::{
     FSEventStreamContext, FSEventStreamCreate, FSEventStreamEventFlags, FSEventStreamEventId,
@@ -9,8 +8,7 @@ use fsevent_sys::{
     core_foundation::CFTimeInterval, kFSEventStreamCreateFlagFileEvents,
     kFSEventStreamCreateFlagNoDefer,
 };
-use std::ptr;
-use std::{ffi::c_void, slice};
+use std::{ffi::c_void, ptr, slice};
 use tokio::sync::mpsc::{UnboundedReceiver, unbounded_channel};
 
 type EventsCallback = Box<dyn FnMut(Vec<FsEvent>) + Send>;

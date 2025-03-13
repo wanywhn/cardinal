@@ -1,7 +1,9 @@
 //! Platform independent fs event processor.
-use crate::consts::{self};
-use crate::database::{Database, PartialDatabase};
-use crate::fsevent::FsEvent;
+use crate::{
+    consts::{self},
+    database::{Database, PartialDatabase},
+    fsevent::FsEvent,
+};
 use anyhow::{Context, Result, bail};
 use crossbeam::channel::{self, Receiver, Sender, TryRecvError, TrySendError};
 use once_cell::sync::Lazy;

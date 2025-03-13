@@ -1,12 +1,7 @@
-use crate::consts::CHUNK_SIZE;
-use crate::disk_entry::DiskEntry;
-use crate::models::DiskEntryRaw;
-use anyhow::Context;
-use anyhow::Result;
+use crate::{consts::CHUNK_SIZE, disk_entry::DiskEntry, models::DiskEntryRaw};
+use anyhow::{Context, Result};
 use crossbeam_channel::Sender;
-use ignore::ParallelVisitor;
-use ignore::ParallelVisitorBuilder;
-use ignore::WalkState;
+use ignore::{ParallelVisitor, ParallelVisitorBuilder, WalkState};
 
 pub struct VisitorBuilder {
     pub raw_entry_sender: Sender<Vec<DiskEntryRaw>>,

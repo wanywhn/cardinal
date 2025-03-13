@@ -1,11 +1,10 @@
 use super::*;
 use cardinal_sdk::fsevent::MacEventFlag;
 use pathbytes::b2p;
-use std::fs::OpenOptions;
-use std::io::Write;
-use std::ops::{Deref, DerefMut};
 use std::{
-    fs::{self, File},
+    fs::{self, File, OpenOptions},
+    io::Write,
+    ops::{Deref, DerefMut},
     os::unix::fs as unixfs,
     path::{Path, PathBuf},
 };

@@ -1,8 +1,6 @@
-use crate::consts::CONFIG;
-use crate::models::DiskEntryRaw;
+use crate::{consts::CONFIG, models::DiskEntryRaw};
 use bincode::{Decode, Encode};
-use std::fs;
-use std::{path::PathBuf, time::SystemTime};
+use std::{fs, path::PathBuf, time::SystemTime};
 
 #[derive(Encode, Decode, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Debug)]
 pub enum FileType {

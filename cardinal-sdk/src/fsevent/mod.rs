@@ -2,15 +2,10 @@ mod event_flag;
 mod event_id;
 mod event_stream;
 
-pub use event_flag::EventFlag;
-pub use event_flag::MacEventFlag;
-pub use event_flag::ScanType;
+pub use event_flag::{EventFlag, MacEventFlag, ScanType};
 pub use event_id::EventId;
-pub use event_stream::EventStream;
-pub use event_stream::spawn_event_watcher;
-
+pub use event_stream::{EventStream, spawn_event_watcher};
 use fsevent_sys::FSEventStreamEventId;
-
 use std::{
     ffi::{CStr, OsStr},
     os::unix::ffi::OsStrExt,

@@ -1,5 +1,4 @@
-use std::ffi::OsStr;
-use std::path::Path;
+use std::{ffi::OsStr, path::Path};
 
 pub fn p2b(path: &Path) -> &[u8] {
     path.as_os_str().as_encoded_bytes()

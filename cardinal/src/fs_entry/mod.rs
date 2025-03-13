@@ -2,21 +2,18 @@
 mod tests;
 
 use crate::fsevent::{EventFlag, FsEvent};
-
-use std::collections::BTreeMap;
-use std::collections::btree_map::Entry;
-use std::ffi::OsStr;
-use std::io::{self};
-use std::iter::Peekable;
-use std::{
-    fs::{self},
-    path::{Path, PathBuf},
-    time::SystemTime,
-};
-
 use bincode::{Decode, Encode};
 use pathbytes::o2b;
 use serde::{Deserialize, Serialize};
+use std::{
+    collections::{BTreeMap, btree_map::Entry},
+    ffi::OsStr,
+    fs::{self},
+    io::{self},
+    iter::Peekable,
+    path::{Path, PathBuf},
+    time::SystemTime,
+};
 use tracing::{debug, info, warn};
 use walkdir::{DirEntry, IntoIter, WalkDir};
 

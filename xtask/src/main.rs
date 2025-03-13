@@ -1,7 +1,5 @@
-use anyhow::bail;
-use anyhow::Result;
-use std::env;
-use std::process::Command;
+use anyhow::{bail, Result};
+use std::{env, process::Command};
 fn main() -> Result<()> {
     let mut envs = vec![];
     envs.push(("DATABASE_URL", "target/cardinal.db"));

@@ -1,22 +1,17 @@
-use crate::consts::*;
-use crate::disk_entry::DiskEntry;
-use crate::fs_visitor;
-use crate::fsevent::EventId;
-use crate::fsevent::FsEvent;
-use crate::fsevent::ScanType;
-use crate::models::DbMeta;
-use crate::models::DiskEntryRaw;
-use crate::schema;
-use anyhow::Context;
-use anyhow::Result;
-use anyhow::anyhow;
+use crate::{
+    consts::*,
+    disk_entry::DiskEntry,
+    fs_visitor,
+    fsevent::{EventId, FsEvent, ScanType},
+    models::{DbMeta, DiskEntryRaw},
+    schema,
+};
+use anyhow::{Context, Result, anyhow};
 use crossbeam_channel::bounded;
-use diesel::connection::SimpleConnection;
-use diesel::prelude::*;
+use diesel::{connection::SimpleConnection, prelude::*};
 use diesel_migrations::MigrationHarness;
 use fsevent_sys::FSEventStreamEventId;
-use std::path::Path;
-use std::time::Instant;
+use std::{path::Path, time::Instant};
 use tracing::info;
 
 fn walk_builder(path: &Path) -> ignore::WalkBuilder {

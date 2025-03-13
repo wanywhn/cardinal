@@ -1,15 +1,17 @@
-use crate::consts::DB_PATH;
-use crate::database::Database;
-use crate::fs_entry::{DiskEntry, FileType, Metadata};
-use crate::fsevent::EventId;
+use crate::{
+    consts::DB_PATH,
+    database::Database,
+    fs_entry::{DiskEntry, FileType, Metadata},
+    fsevent::EventId,
+};
 use anyhow::{Context, Result};
 use pathbytes::b2p;
 use serde::{Deserialize, Serialize};
-use std::fs;
-use std::path::Path;
-use std::path::PathBuf;
-use time::OffsetDateTime;
-use time::format_description::well_known::Rfc3339;
+use std::{
+    fs,
+    path::{Path, PathBuf},
+};
+use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 
 #[derive(Debug, Serialize, Deserialize)]
 struct ReadableMetadata {
