@@ -24,20 +24,19 @@ fn main() {
         } else {
             event_stream.recv().ok()
         };
-        if let Some(events) = events {
-            for event in events {
-                if event.flag.contains(EventFlag::HistoryDone) {
-                    history_done = true;
-                } else {
-                    let timestamp = event_id_to_timestamp(dev, event.id);
-                    let time = chrono::DateTime::from_timestamp(timestamp, 0)
-                        .unwrap()
-                        .with_timezone(&timezone);
-                    println!("{}, {:?}, {:?}", time.to_string(), event.path, event.flag);
-                }
-            }
-        } else {
+        let Some(events) = events else {
             break;
+        };
+        for event in events {
+            if event.flag.contains(EventFlag::HistoryDone) {
+                history_done = true;
+            } else {
+                let timestamp = event_id_to_timestamp(dev, event.id);
+                let time = chrono::DateTime::from_timestamp(timestamp, 0)
+                    .unwrap()
+                    .with_timezone(&timezone);
+                println!("{}, {:?}, {:?}", time.to_string(), event.path, event.flag);
+            }
         }
     }
 }
