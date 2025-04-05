@@ -24,13 +24,32 @@ struct SlabNode {
     name: String,
 }
 
-pub struct NodeData {
+impl SlabNode {
+    pub fn path(&self, slab: &Slab<SlabNode>) -> String {
+        let mut segments = vec![self.name.clone()];
+        // Write code like this to avoid the root node, which has no node name and shouldn't be put into semgents.
+        if let Some(mut parent) = self.parent {
+            while let Some(new_parent) = slab[parent].parent {
+                segments.push(slab[parent].name.clone());
+                parent = new_parent
+            }
+        }
+        let mut result = String::new();
+        for segment in segments.into_iter().rev() {
+            result.push('/');
+            result.push_str(&segment);
+        }
+        result
+    }
+}
+
+pub struct SlabNodeData {
     pub name: String,
     pub ctime: Option<u64>,
     pub mtime: Option<u64>,
 }
 
-impl NodeData {
+impl SlabNodeData {
     pub fn new(name: String, metadata: &Option<Metadata>) -> Self {
         let (ctime, mtime) = match metadata {
             Some(metadata) => ctime_mtime_from_metadata(metadata),
@@ -122,7 +141,7 @@ fn main() {
             // TODO(ldm0): this can be parallelized
             if let Some(nodes) = name_index.get(name) {
                 for &node in nodes {
-                    println!("[{}] key: {}", i, slab[node].name);
+                    println!("[{}] {}", i, slab[node].path(&slab));
                 }
             }
         }
