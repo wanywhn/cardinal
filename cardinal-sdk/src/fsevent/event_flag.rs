@@ -1,6 +1,7 @@
 #![allow(non_upper_case_globals)]
 use bitflags::bitflags;
 bitflags! {
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     pub struct EventFlag: u32 {
         const None = fsevent_sys::kFSEventStreamEventFlagNone;
         const MustScanSubDirs = fsevent_sys::kFSEventStreamEventFlagMustScanSubDirs;

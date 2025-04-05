@@ -19,7 +19,7 @@ once_cell = { version = "1.17.1", features = ["parking_lot"] }
 num_cpus = "1.15.0"
 serde = { version = "1", features = ["derive", "rc"] }
 pathbytes = { path = "../pathbytes" }
-bitflags = "1.3.2"
+bitflags = "2.9.0"
 # fsevent-sys = "4.1.0"
 fsevent-sys.git = "https://github.com/ldm0/fsevent-rust"
 time = "0.3.19"
