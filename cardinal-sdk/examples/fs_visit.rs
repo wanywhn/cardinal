@@ -73,7 +73,22 @@ fn ctime_mtime_from_metadata(metadata: &Metadata) -> (Option<u64>, Option<u64>) 
     (ctime, mtime)
 }
 
-fn construct_nodex_graph(parent: Option<usize>, node: &Node, slab: &mut Slab<SlabNode>) -> usize {
+pub fn memory_size() {
+    let mut current_rss = 0;
+    unsafe { libmimalloc_sys::mi_process_info(
+        std::ptr::null_mut(),
+        std::ptr::null_mut(),
+        std::ptr::null_mut(),
+        &mut current_rss,
+        std::ptr::null_mut(),
+        std::ptr::null_mut(),
+        std::ptr::null_mut(),
+        std::ptr::null_mut(),
+    ) };
+    println!("current rss {}MB", current_rss / 1024 / 1024);
+}
+
+fn construct_node_slab(parent: Option<usize>, node: &Node, slab: &mut Slab<SlabNode>) -> usize {
     let slab_node = SlabNode {
         parent,
         children: vec![],
@@ -83,7 +98,7 @@ fn construct_nodex_graph(parent: Option<usize>, node: &Node, slab: &mut Slab<Sla
     slab[index].children = node
         .children
         .iter()
-        .map(|node| construct_nodex_graph(Some(index), node, slab))
+        .map(|node| construct_node_slab(Some(index), node, slab))
         .collect();
     index
 }
@@ -110,22 +125,29 @@ fn construct_name_index_and_namepool(
 
 fn main() {
     let (slab, slab_root) = {
-        // first multithreaded walk the file system then get a simple tree structure
+        // 先多线程构建树形文件名列表(不能直接创建 slab 因为 slab 无法多线程构建)
         let walk_data = WalkData::default();
         let visit_time = Instant::now();
         let node = walk_it(PathBuf::from("/"), &walk_data).expect("failed to walk");
         dbg!(walk_data);
         dbg!(visit_time.elapsed());
 
-        // next construct the node graph which is single threaded but allows cross referencing
+        memory_size();
+
+        // 然后创建 slab
         let slab_time = Instant::now();
         let mut slab = Slab::new();
-        let slab_root = construct_nodex_graph(None, &node, &mut slab);
+        let slab_root = construct_node_slab(None, &node, &mut slab);
         dbg!(slab_time.elapsed());
         dbg!(slab_root);
         dbg!(slab.len());
+
+        memory_size();
+
         (slab, slab_root)
     };
+
+    memory_size();
 
     {
         let name_index_time = Instant::now();
@@ -148,14 +170,7 @@ fn main() {
         dbg!(search_time.elapsed());
     }
 
-    {
-        let cbor_time = Instant::now();
-        let output = File::create("target/tree.cbor").unwrap();
-        let mut output = BufWriter::new(output);
-        cbor4ii::serde::to_writer(&mut output, &slab).unwrap();
-        dbg!(cbor_time.elapsed());
-        dbg!(fs::metadata("target/tree.cbor").unwrap().len() / 1024 / 1024);
-    }
+    memory_size();
 
     {
         let bincode_time = Instant::now();
