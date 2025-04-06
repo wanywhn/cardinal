@@ -77,6 +77,7 @@ impl NamePool {
         })
     }
 }
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -219,5 +220,41 @@ mod tests {
         let result: Vec<_> = pool.search_suffix(suffix).collect();
         assert_eq!(result.len(), 1);
         assert_eq!(result[0], "hell");
+    }
+
+    #[test]
+    fn test_push_unicode() {
+        let mut pool = NamePool::new();
+        let offset = pool.push("こんにちは");
+        assert_eq!(offset, 1);
+        assert_eq!(pool.get(offset), (16, "こんにちは"));
+    }
+
+    #[test]
+    fn test_search_unicode() {
+        let mut pool = NamePool::new();
+        pool.push("こんにちは");
+        pool.push("世界");
+        pool.push("こんにちは世界");
+
+        let substr = "世界";
+        let result: Vec<_> = pool.search_substr(substr).collect();
+        assert_eq!(result.len(), 2);
+        assert_eq!(result[0], "世界");
+        assert_eq!(result[1], "こんにちは世界");
+    }
+
+    #[test]
+    fn test_search_unicode_suffix() {
+        let mut pool = NamePool::new();
+        pool.push("こんにちは");
+        pool.push("世界");
+        pool.push("こんにちは世界");
+
+        let suffix = c"世界";
+        let result: Vec<_> = pool.search_suffix(suffix).collect();
+        assert_eq!(result.len(), 2);
+        assert_eq!(result[0], "世界");
+        assert_eq!(result[1], "こんにちは世界");
     }
 }
