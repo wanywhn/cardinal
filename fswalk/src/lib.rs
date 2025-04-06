@@ -19,6 +19,20 @@ pub struct Node {
 pub struct WalkData {
     pub num_files: AtomicUsize,
     pub num_dirs: AtomicUsize,
+    ignore_directory: Option<PathBuf>,
+}
+
+impl WalkData {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn with_ignore_directory(path: PathBuf) -> Self {
+        Self {
+            ignore_directory: Some(path),
+            ..Default::default()
+        }
+    }
 }
 
 pub fn walk_it(dir: PathBuf, walk_data: &WalkData) -> Option<Node> {
@@ -26,6 +40,9 @@ pub fn walk_it(dir: PathBuf, walk_data: &WalkData) -> Option<Node> {
 }
 
 fn walk(dir: PathBuf, walk_data: &WalkData, depth: usize) -> Option<Node> {
+    if walk_data.ignore_directory.as_ref() == Some(&dir) {
+        return None;
+    }
     let metadata = &dir.metadata().ok();
     let children = if metadata.as_ref().map(|x| x.is_dir()).unwrap_or_default() {
         walk_data.num_dirs.fetch_add(1, Ordering::Relaxed);
@@ -37,6 +54,9 @@ fn walk(dir: PathBuf, walk_data: &WalkData, depth: usize) -> Option<Node> {
                 .filter_map(|entry| {
                     match &entry {
                         Ok(entry) => {
+                            if walk_data.ignore_directory.as_ref() == Some(&dir) {
+                                return None;
+                            }
                             if let Ok(data) = entry.file_type() {
                                 if data.is_dir() {
                                     return walk(entry.path(), walk_data, depth + 1);

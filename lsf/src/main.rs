@@ -109,7 +109,7 @@ struct Cli {
 
 fn walkfs_to_slab() -> (usize, Slab<SlabNode>) {
     // 先多线程构建树形文件名列表(不能直接创建 slab 因为 slab 无法多线程构建)
-    let walk_data = WalkData::default();
+    let walk_data = WalkData::with_ignore_directory(PathBuf::from("/System/Volumes/Data"));
     let visit_time = Instant::now();
     let node = walk_it(PathBuf::from("/"), &walk_data).expect("failed to walk");
     dbg!(walk_data);
@@ -236,3 +236,10 @@ fn main() {
         dbg!(fs::metadata(CACHE_PATH).unwrap().len() / 1024 / 1024);
     }
 }
+
+// TODO(ldm0):
+// - file removal routine
+// - file addition routine
+// - multi-segment-query-routine
+// [] tui?
+// - lazy metadata design
