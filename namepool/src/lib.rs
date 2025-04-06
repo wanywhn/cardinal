@@ -1,4 +1,6 @@
-#[derive(Default)]
+use bincode::{Decode, Encode};
+
+#[derive(Default, Encode, Decode)]
 pub struct NamePool {
     pool: Vec<u8>,
 }
