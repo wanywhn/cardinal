@@ -169,12 +169,13 @@ fn main() -> Result<()> {
                 (slab, name_index)
             })
     };
+    // name pool construction speed is fast enough that caching it doesn't worth it.
     let name_pool = name_pool(&name_index);
 
     let stdin = std::io::stdin();
     let mut stdout = std::io::stdout();
     loop {
-        print!(">");
+        print!("> ");
         stdout.flush().unwrap();
         let mut line = String::new();
         stdin.read_line(&mut line).unwrap();
