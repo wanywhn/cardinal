@@ -36,10 +36,10 @@ impl WalkData {
 }
 
 pub fn walk_it(dir: &Path, walk_data: &WalkData) -> Option<Node> {
-    walk(dir, walk_data, 0)
+    walk(dir, walk_data)
 }
 
-fn walk(dir: &Path, walk_data: &WalkData, depth: usize) -> Option<Node> {
+fn walk(dir: &Path, walk_data: &WalkData) -> Option<Node> {
     if walk_data.ignore_directory.as_deref() == Some(dir) {
         return None;
     }
@@ -59,7 +59,7 @@ fn walk(dir: &Path, walk_data: &WalkData, depth: usize) -> Option<Node> {
                             }
                             if let Ok(data) = entry.file_type() {
                                 if data.is_dir() {
-                                    return walk(&entry.path(), walk_data, depth + 1);
+                                    return walk(&entry.path(), walk_data);
                                 } else {
                                     walk_data.num_files.fetch_add(1, Ordering::Relaxed);
                                     let name = entry
@@ -77,7 +77,7 @@ fn walk(dir: &Path, walk_data: &WalkData, depth: usize) -> Option<Node> {
                         }
                         Err(failed) => {
                             if handle_error_and_retry(failed) {
-                                return walk(dir, walk_data, depth);
+                                return walk(dir, walk_data);
                             }
                         }
                     }
@@ -86,7 +86,7 @@ fn walk(dir: &Path, walk_data: &WalkData, depth: usize) -> Option<Node> {
                 .collect(),
             Err(failed) => {
                 if handle_error_and_retry(&failed) {
-                    return walk(dir, walk_data, depth);
+                    return walk(dir, walk_data);
                 } else {
                     vec![]
                 }
