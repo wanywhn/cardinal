@@ -6,7 +6,6 @@ use std::{
     collections::BTreeMap,
     fs::{self, File},
     io::{BufReader, BufWriter},
-    path::Path,
     thread::available_parallelism,
     time::Instant,
 };
@@ -64,8 +63,4 @@ pub fn write_cache_to_file(storage: PersistentStorage) -> Result<()> {
             / 1024
     );
     Ok(())
-}
-
-pub fn cache_exists() -> bool {
-    Path::new(CACHE_PATH).exists()
 }

@@ -1,11 +1,10 @@
-mod persistent;
 mod cli;
+mod persistent;
 mod query;
 mod search_cache;
 
 use anyhow::{Context, Result};
 use bincode::{Decode, Encode};
-use persistent::{PersistentStorage, cache_exists, read_cache_from_file, write_cache_to_file};
 use cardinal_sdk::{
     fsevent::{EventFlag, EventStream, FsEvent, ScanType},
     fsevent_sys::FSEventStreamEventId,
@@ -14,7 +13,7 @@ use cardinal_sdk::{
 use clap::Parser;
 use cli::Cli;
 use crossbeam_channel::{Receiver, Sender, bounded, unbounded};
-use search_cache::{SearchCache, name_index, walkfs_to_slab};
+use search_cache::SearchCache;
 use serde::{Deserialize, Serialize};
 use std::{fs::Metadata, io::Write, time::UNIX_EPOCH};
 
@@ -59,28 +58,15 @@ fn ctime_mtime_from_metadata(metadata: &Metadata) -> (Option<u64>, Option<u64>) 
 fn main() -> Result<()> {
     let cli = Cli::parse();
     let last_event_id = current_event_id();
-    let mut cache = if cli.refresh || !cache_exists() {
+    let mut cache = if cli.refresh {
         println!("Walking filesystem...");
-        let (slab_root, slab) = walkfs_to_slab();
-        let name_index = name_index(&slab);
-        SearchCache::new(last_event_id, slab_root, slab, name_index)
+        SearchCache::walk_fs()
     } else {
-        println!("Reading cache...");
-        read_cache_from_file()
-            .map(
-                |PersistentStorage {
-                     slab_root,
-                     slab,
-                     name_index,
-                     ..
-                 }| SearchCache::new(last_event_id, slab_root, slab, name_index),
-            )
-            .unwrap_or_else(|e| {
-                eprintln!("Failed to read cache: {:?}. Re-walking filesystem...", e);
-                let (slab_root, slab) = walkfs_to_slab();
-                let name_index = name_index(&slab);
-                SearchCache::new(last_event_id, slab_root, slab, name_index)
-            })
+        println!("Try reading cache...");
+        SearchCache::try_read_persistent_cache().unwrap_or_else(|e| {
+            println!("Failed to read cache: {e:?}. Re-walking filesystem...");
+            SearchCache::walk_fs()
+        })
     };
 
     let (finish_tx, finish_rx) = bounded::<Sender<SearchCache>>(1);
@@ -125,7 +111,7 @@ fn main() -> Result<()> {
                                 ScanType::ReScan => {
                                     println!("!!! Rescanning");
                                     let root = cache.rescan();
-                                    println!("Rescan done: {:?}", root);
+                                    println!("Rescan done: {root:?}");
                                 }
                                 ScanType::Nop => {}
                             }
@@ -161,11 +147,11 @@ fn main() -> Result<()> {
         match search_result {
             Ok(path_set) => {
                 for (i, path) in path_set.into_iter().enumerate() {
-                    println!("[{}] {}", i, path);
+                    println!("[{i}] {path}");
                 }
             }
             Err(e) => {
-                eprintln!("{:?}", e);
+                eprintln!("Failed to search: {e:?}");
             }
         }
     }
@@ -173,8 +159,9 @@ fn main() -> Result<()> {
     let (cache_tx, cache_rx) = bounded::<SearchCache>(1);
     finish_tx.send(cache_tx).context("cache_tx is closed")?;
     let cache = cache_rx.recv().context("cache_tx is closed")?;
-    write_cache_to_file(cache.into_persistent_storage()).context("Write cache to file failed.")?;
-    println!("Processing changes done");
+    cache
+        .flush_to_file()
+        .context("Failed to write cache to file")?;
 
     Ok(())
 }

@@ -66,7 +66,7 @@ pub fn query_segmentation(query: &str) -> Vec<Segment<'_>> {
     };
     states
         .into_iter()
-        .zip(segments.into_iter())
+        .zip(segments)
         .map(|(state, segment)| match state {
             State::Substr => Segment::Substr(segment),
             State::Prefix => Segment::Prefix(segment),

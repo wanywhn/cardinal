@@ -1,9 +1,10 @@
 use crate::{
     SlabNode,
-    persistent::PersistentStorage,
+    persistent::{PersistentStorage, read_cache_from_file, write_cache_to_file},
     query::{Segment, query_segmentation},
 };
 use anyhow::{Context, Result, bail};
+use cardinal_sdk::utils::current_event_id;
 use fswalk::{Node, WalkData, walk_it};
 use namepool::NamePool;
 use slab::Slab;
@@ -25,6 +26,26 @@ pub struct SearchCache {
 }
 
 impl SearchCache {
+    pub fn try_read_persistent_cache() -> Result<Self> {
+        let last_event_id = current_event_id();
+        read_cache_from_file().map(
+            |PersistentStorage {
+                 slab_root,
+                 slab,
+                 name_index,
+                 ..
+             }| Self::new(last_event_id, slab_root, slab, name_index),
+        )
+    }
+
+    pub fn walk_fs() -> Self {
+        let last_event_id = current_event_id();
+        println!("Walking filesystem...");
+        let (slab_root, slab) = walkfs_to_slab();
+        let name_index = name_index(&slab);
+        Self::new(last_event_id, slab_root, slab, name_index)
+    }
+
     pub fn new(
         last_event_id: u64,
         slab_root: usize,
@@ -68,7 +89,7 @@ impl SearchCache {
                 node_set = Some(new_node_set);
             } else {
                 let names: Vec<_> = match segment {
-                    Segment::Substr(substr) => self.name_pool.search_substr(*substr).collect(),
+                    Segment::Substr(substr) => self.name_pool.search_substr(substr).collect(),
                     Segment::Prefix(prefix) => {
                         let mut buffer = vec![0u8];
                         buffer.extend_from_slice(prefix.as_bytes());
@@ -245,13 +266,14 @@ impl SearchCache {
         }
     }
 
-    pub fn into_persistent_storage(self) -> PersistentStorage {
-        PersistentStorage {
+    pub fn flush_to_file(self) -> Result<()> {
+        write_cache_to_file(PersistentStorage {
             version: Num,
             slab_root: self.slab_root,
             slab: self.slab,
             name_index: self.name_index,
-        }
+        })
+        .context("Write cache to file failed.")
     }
 
     pub fn update_event_id(&mut self, event_id: u64) {
@@ -295,7 +317,7 @@ pub fn walkfs_to_slab() -> (usize, Slab<SlabNode>) {
     // 先多线程构建树形文件名列表(不能直接创建 slab 因为 slab 无法多线程构建(slab 节点有相互引用，不想加锁))
     let walk_data = WalkData::with_ignore_directory(PathBuf::from("/System/Volumes/Data"));
     let visit_time = Instant::now();
-    let node = walk_it(&Path::new("/"), &walk_data).expect("failed to walk");
+    let node = walk_it(Path::new("/"), &walk_data).expect("failed to walk");
     dbg!(walk_data);
     dbg!(visit_time.elapsed());
 
@@ -313,7 +335,7 @@ pub fn walkfs_to_slab() -> (usize, Slab<SlabNode>) {
 pub fn name_index(slab: &Slab<SlabNode>) -> BTreeMap<String, Vec<usize>> {
     let name_index_time = Instant::now();
     let mut name_index = BTreeMap::default();
-    construct_name_index(&slab, &mut name_index);
+    construct_name_index(slab, &mut name_index);
     dbg!(name_index_time.elapsed());
     println!("name index len: {}", name_index.len());
     name_index
