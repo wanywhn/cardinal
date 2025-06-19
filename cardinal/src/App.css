@@ -5,14 +5,15 @@
 .logo.react:hover {
   filter: drop-shadow(0 0 2em #61dafb);
 }
+
 :root {
   font-family: Inter, Avenir, Helvetica, Arial, sans-serif;
   font-size: 16px;
   line-height: 24px;
   font-weight: 400;
 
-  color: #0f0f0f;
-  background-color: #f6f6f6;
+  color: #212529; /* 调整为更柔和的黑色文本 */
+  background-color: #ffffff; /* 使用纯白背景以增强对比度 */
 
   font-synthesis: none;
   text-rendering: optimizeLegibility;
@@ -51,15 +52,10 @@
 
 .row {
   padding: 5px 10px;
-  border-bottom: 1px solid #eee;
+  border-bottom: 1px solid #dee2e6; /* 统一边框颜色 */
   box-sizing: border-box;
-}
-
-/* Add this for dark mode if you want */
-@media (prefers-color-scheme: dark) {
-  .row {
-    border-bottom: 1px solid #444;
-  }
+  white-space: nowrap; /* 防止文本换行 */
+  overflow-x: auto; /* 允许水平滚动 */
 }
 
 input,
@@ -70,10 +66,10 @@ button {
   font-size: 1em;
   font-weight: 500;
   font-family: inherit;
-  color: #0f0f0f;
-  background-color: #ffffff;
+  color: #212529;
+  background-color: #f8f9fa; /* 统一输入框和按钮背景色 */
   transition: border-color 0.25s;
-  box-shadow: 0 2px 2px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 2px 2px rgba(0, 0, 0, 0.05); /* 减淡阴影 */
 }
 
 button {
@@ -81,12 +77,12 @@ button {
 }
 
 button:hover {
-  border-color: #396cd8;
+  border-color: #007bff; /* 设置统一的悬停高亮色 */
 }
 
 button:active {
-  border-color: #396cd8;
-  background-color: #e8e8e8;
+  border-color: #007bff;
+  background-color: #e9ecef;
 }
 
 input,
@@ -94,23 +90,51 @@ button {
   outline: none;
 }
 
+.status-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 8px;
+  background-color: #f8f9fa;
+  text-align: center;
+  font-size: 0.9em;
+  color: #6c757d; /* 使用更柔和的文本颜色 */
+  border-top: 1px solid #dee2e6;
+}
+
 @media (prefers-color-scheme: dark) {
   :root {
-    color: #f6f6f6;
-    background-color: #2f2f2f;
+    color: #e9ecef; /* 优化暗色模式下的文本颜色 */
+    background-color: #121212; /* 使用更深邃的背景色 */
+  }
+
+  .row {
+    border-bottom: 1px solid #343a40;
   }
 
   a:hover {
-    color: #24c8db;
+    color: #0d6efd; /* 统一暗色模式下的高亮色 */
   }
 
   input,
   button {
-    color: #ffffff;
-    background-color: #0f0f0f98;
+    color: #e9ecef;
+    background-color: #212529;
+    border: 1px solid #343a40;
+  }
+
+  button:hover {
+    border-color: #0d6efd;
   }
 
   button:active {
-    background-color: #0f0f0f69;
+    background-color: #343a40;
+  }
+
+  .status-bar {
+    background-color: #212529;
+    color: #adb5bd;
+    border-top: 1px solid #343a40;
   }
 }

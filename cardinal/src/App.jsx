@@ -1,12 +1,18 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { once } from '@tauri-apps/api/event';
 import { List, AutoSizer } from 'react-virtualized';
-import 'react-virtualized/styles.css'; // Don't forget to import the styles
+import 'react-virtualized/styles.css';
 import "./App.css";
 
 function App() {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState([]);
+  const [isInitialized, setIsInitialized] = useState(false);
+
+  once('init_completed', () => {
+    setIsInitialized(true);
+  });
 
   const handleSearch = async () => {
     const searchResults = await invoke("search", { query });
@@ -44,6 +50,9 @@ function App() {
             />
           )}
         </AutoSizer>
+      </div>
+      <div className="status-bar">
+        {isInitialized ? 'Initialized' : 'Initializing...'}
       </div>
     </main>
   );

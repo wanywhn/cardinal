@@ -4,7 +4,7 @@ use cardinal_sdk::{EventStream, FSEventStreamEventId, FsEvent};
 use crossbeam_channel::{bounded, unbounded, Receiver, Sender};
 use search_cache::{SearchCache, SearchNode};
 use std::path::PathBuf;
-use tauri::{Manager, RunEvent, State};
+use tauri::{Emitter, Manager, RunEvent, State};
 
 struct SearchState {
     search_tx: Sender<String>,
@@ -58,23 +58,37 @@ fn spawn_event_watcher(
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() -> Result<()> {
-    // 初始化搜索缓存
-    let path = PathBuf::from("/");
-    let mut cache = if let Ok(cached) = SearchCache::try_read_persistent_cache(&path) {
-        println!("Loaded existing cache");
-        cached
-    } else {
-        println!("Walking filesystem...");
-        SearchCache::walk_fs(path.clone())
-    };
-
     // 创建通信通道
+    let (finish_tx, finish_rx) = bounded::<Sender<SearchCache>>(1);
     let (search_tx, search_rx) = unbounded::<String>();
     let (result_tx, result_rx) = unbounded::<Result<Vec<SearchNode>>>();
-    let (finish_tx, finish_rx) = unbounded::<Sender<SearchCache>>();
+    // 运行Tauri应用
+    let app = tauri::Builder::default()
+        .plugin(tauri_plugin_opener::init())
+        .manage(SearchState {
+            search_tx,
+            result_rx,
+        })
+        .invoke_handler(tauri::generate_handler![search])
+        .build(tauri::generate_context!())
+        .expect("error while running tauri application");
 
+    let app_handle = app.handle().to_owned();
     // 启动后台处理线程
     std::thread::spawn(move || {
+        // 初始化搜索缓存
+        let path = PathBuf::from("/");
+        let mut cache = if let Ok(cached) = SearchCache::try_read_persistent_cache(&path) {
+            println!("Loaded existing cache");
+            cached
+        } else {
+            println!("Walking filesystem...");
+            SearchCache::walk_fs(path.clone())
+        };
+
+        app_handle.emit("init_completed", ()).unwrap();
+
+        // 启动事件监听器
         let event_stream = spawn_event_watcher("/".to_string(), cache.last_event_id());
         println!("Started background processing thread");
 
@@ -98,17 +112,6 @@ pub fn run() -> Result<()> {
         }
         println!("Background thread exited");
     });
-
-    // 运行Tauri应用
-    let app = tauri::Builder::default()
-        .plugin(tauri_plugin_opener::init())
-        .manage(SearchState {
-            search_tx,
-            result_rx,
-        })
-        .invoke_handler(tauri::generate_handler![search])
-        .build(tauri::generate_context!())
-        .expect("error while running tauri application");
 
     app.run(move |_app_handle, _event| {
         match &_event {
