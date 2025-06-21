@@ -14,7 +14,7 @@ use std::{
     path::{Path, PathBuf},
     time::Instant,
 };
-use tracing::debug;
+use tracing::{debug, info};
 use typed_num::Num;
 
 #[derive(Debug, Serialize, Deserialize, Encode, Decode)]
@@ -470,7 +470,7 @@ impl SearchCache {
     pub fn handle_fs_events(&mut self, events: Vec<FsEvent>) {
         for event in events {
             if event.flag.contains(EventFlag::HistoryDone) {
-                debug!("History processing done: {:?}", event);
+                info!("History processing done: {:?}", event);
                 continue;
             }
             self.handle_fs_event(event);
