@@ -39,7 +39,7 @@ pub fn read_cache_from_file() -> Result<PersistentStorage> {
     let mut input = BufReader::new(input);
     let storage: PersistentStorage = bincode::decode_from_std_read(&mut input, BINCODE_CONDFIG)
         .context("Failed to decode cache")?;
-    dbg!(cache_decode_time.elapsed());
+    info!("Cache decode time: {:?}", cache_decode_time.elapsed());
     Ok(storage)
 }
 
@@ -61,7 +61,7 @@ pub fn write_cache_to_file(storage: PersistentStorage) -> Result<()> {
         .context("Failed to encode cache")?;
     }
     fs::rename(CACHE_TMP_PATH, CACHE_PATH).context("Failed to rename cache file")?;
-    dbg!(cache_encode_time.elapsed());
+    info!("Cache encode time: {:?}", cache_encode_time.elapsed());
     info!(
         "Cache size: {} MB",
         fs::metadata(CACHE_PATH)

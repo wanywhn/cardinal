@@ -103,16 +103,22 @@ impl SearchCache {
             let walk_data = WalkData::new(PathBuf::from("/System/Volumes/Data"), false);
             let visit_time = Instant::now();
             let node = walk_it(path, &walk_data).expect("failed to walk");
-            dbg!(walk_data);
-            dbg!(visit_time.elapsed());
+            info!(
+                "Walk data: {:?}, time: {:?}",
+                walk_data,
+                visit_time.elapsed()
+            );
 
             // 然后创建 slab
             let slab_time = Instant::now();
             let mut slab = Slab::new();
             let slab_root = construct_node_slab(None, &node, &mut slab);
-            dbg!(slab_time.elapsed());
-            dbg!(slab_root);
-            dbg!(slab.len());
+            info!(
+                "Slab construction time: {:?}, slab root: {:?}, slab len: {:?}",
+                slab_time.elapsed(),
+                slab_root,
+                slab.len()
+            );
 
             (slab_root, slab)
         }
@@ -135,8 +141,11 @@ impl SearchCache {
             let name_index_time = Instant::now();
             let mut name_index = BTreeMap::default();
             construct_name_index(slab, &mut name_index);
-            dbg!(name_index_time.elapsed());
-            debug!("name index len: {}", name_index.len());
+            info!(
+                "Name index construction time: {:?}, len: {}",
+                name_index_time.elapsed(),
+                name_index.len()
+            );
             name_index
         }
 
@@ -225,7 +234,7 @@ impl SearchCache {
             }
         }
         let search_time = search_time.elapsed();
-        dbg!(search_time);
+        info!("Search time: {:?}", search_time);
         // Safety: node_set can't be None since segments is not empty.
         Ok(node_set.unwrap())
     }
@@ -539,9 +548,9 @@ fn name_pool(name_index: &BTreeMap<String, Vec<usize>>) -> NamePool {
     for name in name_index.keys() {
         name_pool.push(name);
     }
-    dbg!(name_pool_time.elapsed());
-    debug!(
-        "name pool size: {}MB",
+    info!(
+        "Name pool construction time: {:?}, size: {}MB",
+        name_pool_time.elapsed(),
         name_pool.len() as f32 / 1024. / 1024.
     );
     name_pool
