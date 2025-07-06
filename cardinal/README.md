@@ -1,9 +1,4 @@
 # TODO
-- HistoryDone then initialized
-- Initializing prograss 
-- Initializing bar
-- Auto search(input delay detection)
-    - 在输入停止时进行搜索(记录第一次InputChange delay，超过500ms 搜索，否则记录到下次 typing 的 delay，超过上次搜索delay 50%/100% 时进行搜索)
 - 需要实现流式列表（从 rust 层拿整个 btreemap 的 subslice） btreemap 做不到subslice，可能要换成 IndexMap
     - 理想的是一个插入O(logn)，查找O(logn)，用数字索引O(logn)的有序的数据结构
         - indexmap插入是 O(n) 的
@@ -17,6 +12,7 @@
 - 增加 fsevent path merger: 
     - /app/good + /app/good/Cargo.toml == /app/good
     - /app/good/aaa.txt + /app/good/aaa.txt == /app/good/aaa.txt
+- 正则搜索
 
 ```bash
 npm run tauri dev -- --release

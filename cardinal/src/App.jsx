@@ -30,10 +30,22 @@ function App() {
     }
   }, [isInitialized]);
 
-  const handleSearch = async () => {
-    const searchResults = await invoke("search", { query });
-    setResults(searchResults);
-  };
+  useEffect(() => {
+    const handleSearch = async () => {
+      if (query.trim() === '') {
+        setResults([]);
+        return;
+      }
+      const searchResults = await invoke("search", { query });
+      setResults(searchResults);
+    };
+
+    const timer = setTimeout(() => {
+      handleSearch();
+    }, 300); // 300ms debounce
+
+    return () => clearTimeout(timer);
+  }, [query]);
 
   const rowRenderer = ({ key, index, style }) => {
     return (
@@ -50,7 +62,6 @@ function App() {
           id="search-input"
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Search for files and folders..."
-          onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
           spellCheck={false}
           autoCorrect="off"
           autoComplete="off"
