@@ -9,7 +9,7 @@ use std::{
     path::PathBuf,
     sync::{
         atomic::{AtomicBool, Ordering},
-        Arc,
+        Arc, Once,
     },
     time::Duration,
 };
@@ -198,25 +198,55 @@ pub fn run() -> Result<()> {
         info!("Background thread exited");
     });
 
-    app.run(move |_app_handle, event| {
+    app.run(move |app_handle, event| {
         match &event {
             RunEvent::Exit => {
-                // Write cache to file before app exit
-                let (cache_tx, cache_rx) = bounded::<SearchCache>(1);
-                finish_tx
-                    .send(cache_tx)
-                    .context("cache_tx is closed")
-                    .unwrap();
-                let cache = cache_rx.recv().context("cache_tx is closed").unwrap();
-                cache
-                    .flush_to_file()
-                    .context("Failed to write cache to file")
-                    .unwrap();
+                // 右键关闭的时候会被调用
+                // TODO(ldm0): 未来这里可以优化成时不时保存一下，然后关闭的时候如果10秒内之前存过就不再存了
 
-                info!("Cache flushed successfully");
+                // Write cache to file before app exit
+                flush_cache_to_file_once(&finish_tx);
+            }
+            RunEvent::ExitRequested { api, code, .. } => {
+                // 点击红色关闭气泡的时候会被调用，这时候窗口先关闭，然后托盘图标再慢慢退
+
+                // Keep the event loop running even if all windows are closed
+                // This allow us to catch tray icon events when there is no window
+                // if we manually requested an exit (code is Some(_)) we will let it go through
+                if code.is_none() {
+                    info!("Tauri application exited, flushing cache...");
+
+                    // TODO(ldm0): is this necessary?
+                    api.prevent_exit();
+
+                    // TODO(ldm0): change the tray icon to "saving"
+
+                    flush_cache_to_file_once(&finish_tx);
+
+                    app_handle.exit(0);
+                }
             }
             _ => (),
         }
     });
     Ok(())
+}
+
+/// Write cache to file before app exit
+fn flush_cache_to_file_once(finish_tx: &Sender<Sender<SearchCache>>) {
+    static FLUSH_ONCE: Once = Once::new();
+    FLUSH_ONCE.call_once(move || {
+        let (cache_tx, cache_rx) = bounded::<SearchCache>(1);
+        finish_tx
+            .send(cache_tx)
+            .context("cache_tx is closed")
+            .unwrap();
+        let cache = cache_rx.recv().context("cache_tx is closed").unwrap();
+        cache
+            .flush_to_file()
+            .context("Failed to write cache to file")
+            .unwrap();
+
+        info!("Cache flushed successfully");
+    });
 }
