@@ -41,11 +41,10 @@ body {
   font-family: var(--font-sans);
 }
 
-/* Apply globally: disable scroll chaining and rubber-band overscroll */
-*,
+/* Allow inner scroll containers to handle horizontal/vertical scroll normally. */
+/* We only prevent window-level rubber-band on html/body above. */
 *::before,
 *::after {
-  overscroll-behavior: none;
   -webkit-overflow-scrolling: auto;
 }
 
@@ -128,23 +127,6 @@ button:active {
   --columns-total: calc(var(--w-path, 600px) + var(--w-modified, 180px) + var(--w-created, 180px) + var(--w-size, 120px) + (3 * var(--col-gap)) + 20px);
 }
 
-/* Title bar wrapper above results; allows horizontal overflow */
-.titlebar-container {
-  text-align: left;
-  width: 100%;
-  overflow: hidden;
-  /* contains the inner scroller */
-  /* Column layout tokens (mirror results-container) */
-  --col-gap: 12px;
-  --columns-total: calc(var(--w-path, 600px) + var(--w-modified, 180px) + var(--w-created, 180px) + var(--w-size, 120px) + (3 * var(--col-gap)) + 20px);
-}
-
-.titlebar-scroll {
-  overflow-x: auto;
-  /* allow horizontal overflow for headers */
-  overflow-y: hidden;
-}
-
 /* === Columns (Grid) === */
 .columns {
   display: grid;
@@ -166,6 +148,7 @@ button:active {
   background: inherit;
   padding: 6px 10px;
   border-bottom: 1px solid var(--color-border);
+  font-size: 12px;
 }
 
 .header {
@@ -233,8 +216,8 @@ button:active {
   box-sizing: border-box;
   white-space: nowrap;
   /* 防止文本换行 */
-  overflow: hidden;
-  /* 隐藏溢出 */
+  /* 允许父容器进行水平滚动时可见溢出的列内容 */
+  overflow: visible;
   background-color: var(--row-even);
   border-radius: 6px;
   display: flex;

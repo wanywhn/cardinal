@@ -59,8 +59,7 @@ function App() {
   const [isInitialized, setIsInitialized] = useState(false);
   const [isStatusBarVisible, setIsStatusBarVisible] = useState(true);
   const [statusText, setStatusText] = useState("Walking filesystem...");
-  const titlebarScrollRef = useRef(null);
-  const virtualListScrollRef = useRef(null);
+  // Single horizontal scroll container now wraps header + list, so no sync refs needed
 
   useEffect(() => {
     listen('status_update', (event) => {
@@ -88,31 +87,7 @@ function App() {
     }
   }, [results]);
 
-  // Keep title bar and results horizontal scroll in sync
-  useEffect(() => {
-    const headerEl = titlebarScrollRef.current;
-    const bodyEl = virtualListScrollRef.current;
-    if (!headerEl || !bodyEl) return;
-    let syncing = false;
-    const onBodyScroll = () => {
-      if (syncing) return;
-      syncing = true;
-      headerEl.scrollLeft = bodyEl.scrollLeft;
-      syncing = false;
-    };
-    const onHeaderScroll = () => {
-      if (syncing) return;
-      syncing = true;
-      bodyEl.scrollLeft = headerEl.scrollLeft;
-      syncing = false;
-    };
-    bodyEl.addEventListener('scroll', onBodyScroll);
-    headerEl.addEventListener('scroll', onHeaderScroll);
-    return () => {
-      bodyEl.removeEventListener('scroll', onBodyScroll);
-      headerEl.removeEventListener('scroll', onHeaderScroll);
-    };
-  }, [results, colWidths]);
+  // With unified scroll container, no manual scroll syncing required
 
   const handleSearch = async (query) => {
     // console.log("handleSearch", query);
@@ -243,9 +218,9 @@ function App() {
           autoCapitalize="off"
         />
       </div>
-      {/* Title Bar (middle) */}
+      {/* Results with unified horizontal scroll (header + list share the same container) */}
       <div
-        className="titlebar-container"
+        className="results-container"
         style={{
           ['--w-path']: `${colWidths.path}px`,
           ['--w-modified']: `${colWidths.modified}px`,
@@ -253,7 +228,17 @@ function App() {
           ['--w-size']: `${colWidths.size}px`,
         }}
       >
-        <div className="titlebar-scroll" ref={titlebarScrollRef}>
+        {/* The scroll-area provides a single horizontal scrollbar for both header and list */}
+        <div
+          className="scroll-area"
+          style={{
+            overflowX: 'auto',
+            overflowY: 'hidden',
+            height: '100%',
+            display: 'flex',
+            flexDirection: 'column',
+          }}
+        >
           <div className="header-row columns">
             <span className="path-text header header-cell">
               Path
@@ -272,20 +257,8 @@ function App() {
               <span className="col-resizer" onMouseDown={onResizeStart('size')} />
             </span>
           </div>
-        </div>
-      </div>
-
-      {/* Results (bottom) */}
-      <div
-        className="results-container"
-        style={{
-          ['--w-path']: `${colWidths.path}px`,
-          ['--w-modified']: `${colWidths.modified}px`,
-          ['--w-created']: `${colWidths.created}px`,
-          ['--w-size']: `${colWidths.size}px`,
-        }}
-      >
-        <div className="virtual-list" ref={virtualListScrollRef}>
+          {/* List fills remaining vertical space */}
+          <div style={{ flex: 1, minHeight: 0 }}>
           <InfiniteLoader
             ref={infiniteLoaderRef}
             isRowLoaded={isRowLoaded}
@@ -313,6 +286,7 @@ function App() {
               </AutoSizer>
             )}
           </InfiniteLoader>
+          </div>
         </div>
       </div>
       {isStatusBarVisible && (
