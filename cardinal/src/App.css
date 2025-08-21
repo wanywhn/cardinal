@@ -49,6 +49,10 @@ body {
   overflow: hidden;
   overscroll-behavior: none;
   font-family: var(--font-sans);
+  /* 禁用 Safari WebView 的橡皮筋滚动效果 */
+  -webkit-overflow-scrolling: touch;
+  position: fixed;
+  width: 100%;
 }
 
 /* 允许内部容器滚动 */
@@ -70,6 +74,9 @@ main,
   /* Make container fill the viewport height */
   box-sizing: border-box;
   gap: 0.25rem;
+  /* 禁用橡皮筋滚动效果 */
+  overscroll-behavior: none;
+  position: relative;
 }
 
 /* === Search Bar === */
@@ -136,17 +143,23 @@ button:active {
 }
 
 .scroll-area {
-  overflow-x: auto;
-  overflow-y: auto;
+  overflow: hidden; /* 外层容器不显示滚动条 */
   height: 100%;
   display: flex;
   flex-direction: column;
-  /* 让横向滚动条属于scroll-area */
+  /* 禁用橡皮筋滚动效果 */
+  overscroll-behavior: none;
+  -webkit-overflow-scrolling: touch;
 }
 
-/* 不再隐藏原生滚动条 */
-
-/* 去除自定义悬浮竖直滚动条 */
+/* Grid 内部处理所有滚动 */
+.ReactVirtualized__Grid {
+  overflow: auto !important;
+  /* 禁用橡皮筋滚动效果 */
+  overscroll-behavior: none;
+  -webkit-overflow-scrolling: touch;
+  z-index: 2; /* 确保滚动条显示在 spinner 之上 */
+}
 
 /* === Columns (Grid) === */
 .columns {
@@ -162,6 +175,17 @@ button:active {
 /* Row and cell styles are moved below header/virtual list for logical order */
 
 /* === Header Row === */
+.header-row-container {
+  overflow: hidden;
+  /* 完全禁用表头的滚动，只接收来自Grid的滚动位置 */
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE and Edge */
+}
+
+.header-row-container::-webkit-scrollbar {
+  display: none; /* Chrome, Safari, Opera */
+}
+
 .header-row {
   position: sticky;
   top: 0;
@@ -319,6 +343,7 @@ button:active {
   display: flex;
   align-items: center;
   justify-content: center;
+  z-index: -1; /* 让水平滚动条能覆盖 spinner */
 }
 
 .spinner {
@@ -328,6 +353,7 @@ button:active {
   border-radius: 50%;
   border-left-color: #09f;
   margin-right: 8px;
+  z-index: -1; /* 让水平滚动条能覆盖 spinner */
 
   animation: spin 1s ease infinite;
 }

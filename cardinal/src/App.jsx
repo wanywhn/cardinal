@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { once, listen } from '@tauri-apps/api/event';
 import { InfiniteLoader, Grid, AutoSizer } from 'react-virtualized';
@@ -29,6 +29,7 @@ function App() {
   const [statusText, setStatusText] = useState("Walking filesystem...");
   const scrollAreaRef = useRef(null);
   const listRef = useRef(null);
+  const headerRef = useRef(null);
   const [contextMenu, setContextMenu] = useState({ visible: false, x: 0, y: 0, path: null });
 
   // 状态事件
@@ -97,6 +98,13 @@ function App() {
     document.body.style.userSelect = '';
     document.body.style.cursor = '';
   };
+
+  // 滚动同步处理 - 单向同步版本（Grid -> Header）
+  const handleGridScroll = useCallback(({ scrollLeft }) => {
+    if (headerRef.current) {
+      headerRef.current.scrollLeft = scrollLeft;
+    }
+  }, []);
 
   // 虚拟列表加载
   const isCellLoaded = ({ rowIndex }) => lruCache.current.has(rowIndex);
@@ -200,7 +208,11 @@ function App() {
         }}
       >
         <div className="scroll-area" ref={scrollAreaRef}>
-          <ColumnHeader colWidths={colWidths} onResizeStart={onResizeStart} />
+          <ColumnHeader 
+            ref={headerRef} 
+            colWidths={colWidths} 
+            onResizeStart={onResizeStart}
+          />
           <div style={{ flex: 1, minHeight: 0 }}>
             <InfiniteLoader
               ref={infiniteLoaderRef}
@@ -222,13 +234,15 @@ function App() {
                         onSectionRendered={({ rowStartIndex, rowStopIndex }) => 
                           onRowsRendered({ startIndex: rowStartIndex, stopIndex: rowStopIndex })
                         }
-                        width={Math.max(width, columnsTotal)}
+                        onScroll={handleGridScroll}
+                        width={width}
                         height={height}
                         rowCount={results.length}
                         columnCount={1}
                         rowHeight={ROW_HEIGHT}
-                        columnWidth={Math.max(width, columnsTotal)}
+                        columnWidth={columnsTotal}
                         cellRenderer={cellRenderer}
+                        overscanRowCount={5}
                       />
                     );
                   }}
