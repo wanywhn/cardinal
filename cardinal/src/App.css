@@ -41,6 +41,13 @@
   /* 去除自定义滚动条相关变量 */
 }
 
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
 /* === Global Resets === */
 /* Prevent window-level rubber-band bounce; only inner containers scroll */
 html,
