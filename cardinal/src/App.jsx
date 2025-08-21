@@ -56,16 +56,22 @@ function App() {
     e.preventDefault();
     e.stopPropagation();
     const startX = e.clientX;
-    const startLeft = horizontalBar.left;
     const el = scrollAreaRef.current;
     const clientWidth = el?.clientWidth || 1;
     const scrollWidth = el?.scrollWidth || 1;
     const barWidth = horizontalBar.width || 0;
+    // Track geometry from the visual track (thumb's parent)
+    const trackRect = e.currentTarget.parentElement.getBoundingClientRect();
+    const trackLeft = trackRect.left;
+    const maxTrackX = Math.max(0, trackRect.width - barWidth);
+    // Preserve pointer offset inside the thumb to keep alignment during drag
+    const grabOffsetX = startX - (trackLeft + (horizontalBar.left || 0));
+    // Avoid text selection while dragging
+    const prevUserSelect = document.body.style.userSelect;
+    document.body.style.userSelect = 'none';
     function onMove(ev) {
-      const deltaX = ev.clientX - startX;
-      // Clamp thumb within track (track length = clientWidth - barWidth)
-      const maxTrackX = Math.max(0, clientWidth - barWidth);
-      let newLeft = Math.max(0, Math.min(maxTrackX, startLeft + deltaX));
+      // Map mouse to thumb-left using track rect and initial grab offset
+      let newLeft = Math.max(0, Math.min(maxTrackX, (ev.clientX - trackLeft - grabOffsetX)));
       // Map thumb position to content scroll range (scrollWidth - clientWidth)
       const maxContentScrollX = Math.max(0, scrollWidth - clientWidth);
       const ratioX = maxTrackX > 0 ? (newLeft / maxTrackX) : 0;
@@ -73,6 +79,7 @@ function App() {
       if (el) el.scrollLeft = scrollLeft;
     }
     function onUp() {
+      document.body.style.userSelect = prevUserSelect;
       window.removeEventListener('mousemove', onMove);
       window.removeEventListener('mouseup', onUp);
     }
@@ -85,20 +92,27 @@ function App() {
     e.preventDefault();
     e.stopPropagation();
     const startY = e.clientY;
-    const startTop = verticalBar.top;
     const grid = listRef.current?.Grid || listRef.current;
     const visibleHeight = grid?.props.height || 1;
-    const totalRows = results.length;
-    const rowHeight = 24;
-    const totalHeight = totalRows * rowHeight;
+    // Track geometry from the visual track (thumb's parent)
+    const trackRect = e.currentTarget.parentElement.getBoundingClientRect();
+    const trackTop = trackRect.top;
+    const trackHeight = trackRect.height || visibleHeight;
+    // Preserve pointer offset inside the thumb to keep alignment during drag
+    const grabOffsetY = startY - (trackTop + (verticalBar.top || 0));
+    const prevUserSelect = document.body.style.userSelect;
+    document.body.style.userSelect = 'none';
+    const scroller = grid && grid._scrollingContainer ? grid._scrollingContainer : null;
     function onMove(ev) {
-      const deltaY = ev.clientY - startY;
-      // Clamp thumb within track (track length = visibleHeight - barHeight)
+      // Clamp thumb within track (track length = trackHeight - barHeight)
       const barHeight = verticalBar.height || 0;
-      const maxTrackY = Math.max(0, visibleHeight - barHeight);
-      let newTop = Math.max(0, Math.min(maxTrackY, startTop + deltaY));
-      // Map thumb position to content scroll range (totalHeight - visibleHeight)
-      const maxContentScrollY = Math.max(0, totalHeight - visibleHeight);
+      const maxTrackY = Math.max(0, trackHeight - barHeight);
+      // Map mouse to thumb-top using track rect and initial grab offset
+      let newTop = Math.max(0, Math.min(maxTrackY, (ev.clientY - trackTop - grabOffsetY)));
+      // Map thumb to actual DOM content scroll range (scrollHeight - clientHeight)
+      const domClientH = scroller ? scroller.clientHeight : visibleHeight;
+      const domScrollH = scroller ? scroller.scrollHeight : (results.length * 24);
+      const maxContentScrollY = Math.max(0, domScrollH - domClientH);
       const ratioY = maxTrackY > 0 ? (newTop / maxTrackY) : 0;
       const scrollTop = Math.max(0, Math.min(maxContentScrollY, ratioY * maxContentScrollY));
       if (grid && grid._scrollingContainer) {
@@ -106,6 +120,7 @@ function App() {
       }
     }
     function onUp() {
+      document.body.style.userSelect = prevUserSelect;
       window.removeEventListener('mousemove', onMove);
       window.removeEventListener('mouseup', onUp);
     }

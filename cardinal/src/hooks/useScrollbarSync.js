@@ -11,19 +11,54 @@ export function useScrollbarSync({ listRef, scrollAreaRef, results, colWidths, s
       const rowHeight = 24;
       const visibleHeight = grid.props.height;
       const totalHeight = totalRows * rowHeight;
+      // Visual track height from DOM: scroll area clientHeight - header height
+      const scrollAreaEl = scrollAreaRef.current;
+      const headerEl = scrollAreaEl.firstElementChild; // ColumnHeader is first child
+      const headerHeight = headerEl ? headerEl.offsetHeight : 0;
+      const trackHeight = Math.max(0, (scrollAreaEl ? scrollAreaEl.clientHeight : visibleHeight) - headerHeight);
       // Prefer reading the live scrollTop from the actual scrolling element to avoid lag
       const scrollTop = scroller ? scroller.scrollTop : (grid.state ? grid.state.scrollTop : 0);
-      if (totalHeight <= visibleHeight) {
+      // Use actual DOM scroll metrics when available
+      const domClientH = scroller ? scroller.clientHeight : visibleHeight;
+      const domScrollH = scroller ? scroller.scrollHeight : totalHeight;
+      if (domScrollH <= domClientH) {
+        console.debug('[scrollbar][V] hidden (content fits)', {
+          totalRows,
+          rowHeight,
+          visibleHeight,
+          headerHeight,
+          trackHeight,
+          totalHeight,
+          domClientH,
+          domScrollH,
+        });
         setVerticalBar({ top: 0, height: 0, visible: false });
         return;
       }
-      // VS Code-like mapping: map content scroll [0, totalHeight - visibleHeight]
-      // to track range [0, visibleHeight - barHeight]
-      const barHeight = Math.max(32, (visibleHeight * visibleHeight) / totalHeight);
-      const maxContentScroll = Math.max(1, totalHeight - visibleHeight);
-      const maxTrack = Math.max(0, visibleHeight - barHeight);
+      // VS Code-like mapping using real track height and DOM scroll metrics
+      // Thumb size T ≈ max(32, trackHeight * (domClientH / domScrollH))
+      const barHeight = Math.max(32, trackHeight * (domClientH / Math.max(1, domScrollH)));
+      const maxContentScroll = Math.max(1, domScrollH - domClientH);
+      const maxTrack = Math.max(0, trackHeight - barHeight);
       const ratio = scrollTop / maxContentScroll;
       const barTop = Math.max(0, Math.min(maxTrack, ratio * maxTrack));
+      console.debug('[scrollbar][V] update', {
+        totalRows,
+        rowHeight,
+        visibleHeight,
+        headerHeight,
+        trackHeight,
+        totalHeight,
+        domClientH,
+        domScrollH,
+        scrollTopSource: scroller ? 'scroller' : 'grid.state',
+        scrollTop,
+        barHeight,
+        maxContentScroll,
+        maxTrack,
+        ratio,
+        barTop,
+      });
       setVerticalBar({ top: barTop, height: barHeight, visible: true });
     }
     function updateHorizontalBar() {
