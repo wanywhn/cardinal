@@ -22,6 +22,8 @@
 - remove bincode, use postcard
     - SlabNode::children 用 IndexSet
     - name_index & MetadataCache::* 用 IndexSet 看看
+- metadata 启动后自动 fetching
+- Windows/NTFS 支持
 
 
 ```bash
