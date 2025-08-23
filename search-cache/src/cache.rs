@@ -26,6 +26,12 @@ pub struct SlabNode {
     metadata: Option<NodeMetadata>,
 }
 
+#[derive(Debug)]
+pub struct SearchResultNode {
+    pub path: PathBuf,
+    pub metadata: Option<NodeMetadata>,
+}
+
 pub struct SearchCache {
     path: PathBuf,
     last_event_id: u64,
@@ -45,12 +51,6 @@ impl std::fmt::Debug for SearchCache {
             .field("name_index.len()", &self.name_index.len())
             .finish()
     }
-}
-
-#[derive(Debug)]
-pub struct SearchNode {
-    pub path: PathBuf,
-    pub metadata: Option<NodeMetadata>,
 }
 
 impl SearchCache {
@@ -444,21 +444,21 @@ impl SearchCache {
     }
 
     /// Note that this function doesn't fetch metadata(even if it's not cahced) for the nodes.
-    pub fn query_files(&mut self, query: String) -> Result<Vec<SearchNode>> {
+    pub fn query_files(&mut self, query: String) -> Result<Vec<SearchResultNode>> {
         self.search(&query)
             .map(|nodes| self.expand_file_nodes_inner::<false>(nodes))
     }
 
     /// Returns a node info vector with the same length as the input nodes.
     /// If the given node is not found, an empty SearchNode is returned.
-    pub fn expand_file_nodes(&mut self, nodes: Vec<usize>) -> Vec<SearchNode> {
+    pub fn expand_file_nodes(&mut self, nodes: Vec<usize>) -> Vec<SearchResultNode> {
         self.expand_file_nodes_inner::<true>(nodes)
     }
 
     fn expand_file_nodes_inner<const FETCH_META: bool>(
         &mut self,
         nodes: Vec<usize>,
-    ) -> Vec<SearchNode> {
+    ) -> Vec<SearchResultNode> {
         nodes
             .into_iter()
             .map(|node| {
@@ -481,7 +481,7 @@ impl SearchCache {
                         }
                     }
                 });
-                SearchNode {
+                SearchResultNode {
                     path: path.unwrap_or_default(),
                     metadata,
                 }

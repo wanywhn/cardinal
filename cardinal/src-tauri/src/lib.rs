@@ -3,7 +3,7 @@ use anyhow::{Context, Result};
 use cardinal_sdk::{EventFlag, EventWatcher};
 use crossbeam_channel::{bounded, unbounded, Receiver, Sender};
 use fswalk::NodeMetadata;
-use search_cache::{HandleFSEError, SearchCache, SearchNode, WalkData};
+use search_cache::{HandleFSEError, SearchCache, SearchResultNode, WalkData};
 use serde::Serialize;
 use std::{
     cell::LazyCell,
@@ -33,7 +33,7 @@ struct SearchState {
     result_rx: Receiver<Result<Vec<usize>>>,
 
     node_info_tx: Sender<Vec<usize>>,
-    node_info_results_rx: Receiver<Vec<SearchNode>>,
+    node_info_results_rx: Receiver<Vec<SearchResultNode>>,
 }
 
 #[tauri::command]
@@ -81,7 +81,7 @@ async fn get_nodes_info(
         .recv()
         .map(|x| {
             x.into_iter()
-                .map(|SearchNode { path, metadata }| NodeInfo {
+                .map(|SearchResultNode { path, metadata }| NodeInfo {
                     path: path.to_string_lossy().into_owned(),
                     metadata,
                 })
@@ -122,7 +122,7 @@ pub fn run() -> Result<()> {
     let (search_tx, search_rx) = unbounded::<String>();
     let (result_tx, result_rx) = unbounded::<Result<Vec<usize>>>();
     let (node_info_tx, node_info_rx) = unbounded::<Vec<usize>>();
-    let (node_info_results_tx, node_info_results_rx) = unbounded::<Vec<SearchNode>>();
+    let (node_info_results_tx, node_info_results_rx) = unbounded::<Vec<SearchResultNode>>();
 
     // 运行Tauri应用
     let app = tauri::Builder::default()
