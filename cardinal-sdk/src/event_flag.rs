@@ -70,8 +70,12 @@ impl EventFlag {
         let event_type = self.event_type();
         let is_dir = matches!(event_type, EventType::Dir);
         if self.contains(EventFlag::HistoryDone) {
-            return ScanType::Nop;
-        } else if self.contains(EventFlag::None) {
+            ScanType::Nop
+        } else if self.contains(EventFlag::EventIdsWrapped) {
+            ScanType::Nop
+        } else if self.contains(EventFlag::RootChanged) {
+            ScanType::ReScan
+        } else {
             // Strange event, doesn't know when it happens, processing it using a generic way
             // e.g. new event: fs_event=FsEvent { path: "/.docid/16777229/changed/782/src=0,dst=41985052", flag: kFSEventStreamEventFlagNone, id: 471533015 }
             if is_dir {
@@ -79,83 +83,73 @@ impl EventFlag {
             } else {
                 ScanType::SingleNode
             }
-        } else if self.contains(EventFlag::MustScanSubDirs)
-            | self.contains(EventFlag::UserDropped)
-            | self.contains(EventFlag::KernelDropped)
-        {
-            ScanType::Folder
-        } else if self.contains(EventFlag::EventIdsWrapped) {
-            ScanType::Nop
-        } else if self.contains(EventFlag::RootChanged) {
-            ScanType::ReScan
-        } else if self.contains(EventFlag::Unmount) | self.contains(EventFlag::Mount) {
-            assert!(is_dir);
-            ScanType::Folder
-        } else if self.contains(EventFlag::ItemCreated) {
-            // creating dir is also single node
-            ScanType::SingleNode
-        } else if self.contains(EventFlag::ItemRemoved) {
-            if is_dir {
-                ScanType::Folder
-            } else {
-                ScanType::SingleNode
-            }
-        } else if self.contains(EventFlag::ItemInodeMetaMod) {
-            // creating dir is also single node
-            ScanType::SingleNode
-        } else if self.contains(EventFlag::ItemRenamed) {
-            if is_dir {
-                ScanType::Folder
-            } else {
-                ScanType::SingleNode
-            }
-        } else if self.contains(EventFlag::ItemModified) {
-            assert!(!is_dir);
-            ScanType::SingleNode
-        } else if self.contains(EventFlag::ItemFinderInfoMod)
-            | self.contains(EventFlag::ItemChangeOwner)
-            | self.contains(EventFlag::ItemXattrMod)
-        {
-            // creating dir is also single node
-            ScanType::SingleNode
-        } else if self.contains(EventFlag::OwnEvent) {
-            unreachable!()
-        } else if self.contains(EventFlag::Cloned) {
-            if is_dir {
-                ScanType::Folder
-            } else {
-                ScanType::SingleNode
-            }
-        } else {
-            panic!("unexpected event: {:?}", self)
-        }
-    }
-
-    pub fn event_action(&self) -> EventAction {
-        let f = self;
-        if f.contains(EventFlag::ItemCreated)
-            || f.contains(EventFlag::ItemRemoved)
-            || f.contains(EventFlag::Unmount)
-            || f.contains(EventFlag::ItemInodeMetaMod)
-            || f.contains(EventFlag::ItemXattrMod)
-            || f.contains(EventFlag::ItemChangeOwner)
-            || f.contains(EventFlag::ItemFinderInfoMod)
-            || f.contains(EventFlag::ItemModified)
-            // Nowhere to distinguish it's 'from' or 'to'.
-            || f.contains(EventFlag::ItemRenamed)
-            // Nowhere to distinguish it's 'from' or 'to'.
-            || f.contains(EventFlag::Cloned)
-        {
-            EventAction::Modify
-        } else {
-            EventAction::Unknown
         }
     }
 }
 
-/// Abstract action of a file system event.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub enum EventAction {
-    Modify,
-    Unknown,
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_event_type_deduction() {
+        assert!(matches!(
+            (EventFlag::ItemIsFile).event_type(),
+            EventType::File
+        ));
+        assert!(matches!(
+            (EventFlag::ItemIsDir).event_type(),
+            EventType::Dir
+        ));
+        assert!(matches!(
+            (EventFlag::ItemIsSymlink).event_type(),
+            EventType::Symlink
+        ));
+        assert!(matches!(
+            (EventFlag::IsHardlink).event_type(),
+            EventType::Hardlink
+        ));
+        // Unknown when no type bits set
+        assert!(matches!((EventFlag::None).event_type(), EventType::Unknown));
+    }
+
+    #[test]
+    fn test_scan_type_root_changed_and_history_done() {
+        // RootChanged should always trigger ReScan regardless of type bits; test with RootChanged only.
+        assert_eq!(EventFlag::RootChanged.scan_type(), ScanType::ReScan);
+        assert_eq!(EventFlag::HistoryDone.scan_type(), ScanType::Nop);
+    }
+
+    #[test]
+    fn test_scan_type_created_removed_modified() {
+        // File create => SingleNode
+        assert!(matches!(
+            (EventFlag::ItemCreated | EventFlag::ItemIsFile).scan_type(),
+            ScanType::SingleNode
+        ));
+        // Dir removal => Folder
+        assert!(matches!(
+            (EventFlag::ItemRemoved | EventFlag::ItemIsDir).scan_type(),
+            ScanType::Folder
+        ));
+        // File removal => SingleNode
+        assert!(matches!(
+            (EventFlag::ItemRemoved | EventFlag::ItemIsFile).scan_type(),
+            ScanType::SingleNode
+        ));
+        // File modified => SingleNode
+        assert!(matches!(
+            (EventFlag::ItemModified | EventFlag::ItemIsFile).scan_type(),
+            ScanType::SingleNode
+        ));
+    }
+
+    #[test]
+    fn test_scan_type_must_scan_subdirs() {
+        // MustScanSubDirs => Folder
+        assert!(matches!(
+            (EventFlag::MustScanSubDirs | EventFlag::ItemIsDir).scan_type(),
+            ScanType::Folder
+        ));
+    }
 }

@@ -1496,8 +1496,7 @@ mod tests {
             id: 1,
             flag: EventFlag::RootChanged,
         }];
-        let out = scan_paths(events);
-        assert_eq!(out, vec![root]);
+        assert!(scan_paths(events).is_empty());
     }
 
     #[test]
