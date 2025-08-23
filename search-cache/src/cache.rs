@@ -9,7 +9,7 @@ use query_segmentation::{query_segmentation, Segment};
 use serde::{Deserialize, Serialize};
 use slab::Slab;
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     ffi::{CString, OsStr},
     io::ErrorKind,
     path::{Path, PathBuf},
@@ -75,6 +75,8 @@ pub struct SearchCache {
     slab: Slab<SlabNode>,
     name_index: BTreeMap<String, Vec<usize>>,
     name_pool: NamePool,
+    // Start initializing aftr cache initialized, update on fsevent, and slowly build from slab root.
+    metadata_cache: MetadataCache,
 }
 
 impl std::fmt::Debug for SearchCache {
@@ -113,7 +115,17 @@ impl SearchCache {
                      slab,
                      name_index,
                      last_event_id,
-                 }| Self::new(path, last_event_id, slab_root, slab, name_index),
+                     metadata_cache,
+                 }| {
+                    Self::new(
+                        path,
+                        last_event_id,
+                        slab_root,
+                        slab,
+                        name_index,
+                        metadata_cache,
+                    )
+                },
             )
     }
 
@@ -163,7 +175,7 @@ impl SearchCache {
                 // The slab is newly constructed, thus though slab.iter() iterates all slots, it won't waste too much.
                 for (i, node) in slab.iter() {
                     if let Some(nodes) = name_index.get_mut(&node.name) {
-                        // 因为 slab 是新构建的，所以预期不会有重复
+                        // 因为 slab 是新构建的，所以预期不会有重复，我们直接 push
                         // if !nodes.iter().any(|&x| x == i) {
                         nodes.push(i);
                         // }
@@ -187,7 +199,15 @@ impl SearchCache {
         let last_event_id = current_event_id();
         let (slab_root, slab) = walkfs_to_slab(&path, walk_data);
         let name_index = name_index(&slab);
-        Self::new(path, last_event_id, slab_root, slab, name_index)
+        // metadata cache inits later
+        Self::new(
+            path,
+            last_event_id,
+            slab_root,
+            slab,
+            name_index,
+            MetadataCache::new(),
+        )
     }
 
     pub fn new(
@@ -196,6 +216,7 @@ impl SearchCache {
         slab_root: usize,
         slab: Slab<SlabNode>,
         name_index: BTreeMap<String, Vec<usize>>,
+        metadata_cache: MetadataCache,
     ) -> Self {
         // name pool construction speed is fast enough that caching it doesn't worth it.
         let name_pool = name_pool(&name_index);
@@ -206,6 +227,7 @@ impl SearchCache {
             slab,
             name_index,
             name_pool,
+            metadata_cache,
         }
     }
 
@@ -300,6 +322,7 @@ impl SearchCache {
 
     fn push_node(&mut self, node: SlabNode) -> usize {
         let node_name = node.name.clone();
+        let node_metadata = node.metadata.as_ref().copied();
         let index = self.slab.insert(node);
         if let Some(indexes) = self.name_index.get_mut(&node_name) {
             if !indexes.iter().any(|&x| x == index) {
@@ -309,6 +332,7 @@ impl SearchCache {
             self.name_pool.push(&node_name);
             self.name_index.insert(node_name, vec![index]);
         }
+        self.metadata_cache.insert(index, node_metadata);
         index
     }
 
@@ -336,10 +360,12 @@ impl SearchCache {
     // Blindly try create node chain, it doesn't check if the path is really exist on disk.
     fn create_node_chain(&mut self, path: &Path) -> usize {
         let mut current = self.slab_root;
+        let mut current_path = self.path.clone();
         for name in path
             .components()
             .map(|x| x.as_os_str().to_string_lossy().into_owned())
         {
+            current_path.push(name.clone());
             current = if let Some(&index) = self.slab[current]
                 .children
                 .iter()
@@ -348,11 +374,17 @@ impl SearchCache {
                 index
             } else {
                 // TODO(ldm0): optimize: slab node children is empty, we can create a node chain directly.
+                let metadata = std::fs::metadata(&current_path)
+                    .map(NodeMetadata::from)
+                    .ok();
                 let node = SlabNode {
                     parent: Some(current),
                     children: vec![],
                     name,
-                    metadata: SlabNodeMetadata::None,
+                    metadata: match metadata {
+                        Some(metadata) => SlabNodeMetadata::Some(metadata),
+                        None => SlabNodeMetadata::Unaccessible,
+                    },
                 };
                 let index = self.push_node(node);
                 self.slab[current].add_children(index);
@@ -437,6 +469,9 @@ impl SearchCache {
                     // but currently name pool doesn't support remove. (GC is needed for name pool)
                     // self.name_pool.remove(&node.name);
                 }
+                cache
+                    .metadata_cache
+                    .remove(index, node.metadata.as_ref().copied());
             }
         }
 
@@ -452,15 +487,25 @@ impl SearchCache {
     }
 
     pub fn flush_to_file(self, cache_path: &Path) -> Result<()> {
+        let Self {
+            path,
+            last_event_id,
+            slab_root,
+            slab,
+            name_index,
+            name_pool: _,
+            metadata_cache,
+        } = self;
         write_cache_to_file(
             cache_path,
             PersistentStorage {
                 version: Num,
-                path: self.path,
-                slab_root: self.slab_root,
-                slab: self.slab,
-                name_index: self.name_index,
-                last_event_id: self.last_event_id,
+                path,
+                slab_root,
+                slab,
+                name_index,
+                last_event_id,
+                metadata_cache,
             },
         )
         .context("Write cache to file failed.")
@@ -497,9 +542,9 @@ impl SearchCache {
     ) -> Vec<SearchResultNode> {
         nodes
             .into_iter()
-            .map(|node| {
-                let path = self.node_path(node);
-                let metadata = self.slab.get_mut(node).and_then(|node| {
+            .map(|node_index| {
+                let path = self.node_path(node_index);
+                let metadata = self.slab.get_mut(node_index).and_then(|node| {
                     match node.metadata {
                         SlabNodeMetadata::Unaccessible => None,
                         SlabNodeMetadata::Some(metadata) => Some(metadata),
@@ -508,12 +553,13 @@ impl SearchCache {
                                 None
                             } else if let Some(path) = &path {
                                 // try fetching metadata if it's not cached and cache them
-                                let metadata = std::fs::metadata(path).map(NodeMetadata::from);
+                                let metadata = std::fs::metadata(path).map(NodeMetadata::from).ok();
                                 node.metadata = match metadata {
-                                    Ok(metadata) => SlabNodeMetadata::Some(metadata),
-                                    Err(_) => SlabNodeMetadata::Unaccessible,
+                                    Some(metadata) => SlabNodeMetadata::Some(metadata),
+                                    None => SlabNodeMetadata::Unaccessible,
                                 };
-                                metadata.ok()
+                                self.metadata_cache.insert(node_index, metadata);
+                                metadata
                             } else {
                                 None
                             }
@@ -554,6 +600,99 @@ impl SearchCache {
             self.update_last_event_id(max_event_id);
         }
         Ok(())
+    }
+}
+
+#[derive(Encode, Decode)]
+pub struct MetadataCache {
+    ctime_index: BTreeMap<u64, Vec<usize>>,
+    mtime_index: BTreeMap<u64, Vec<usize>>,
+    size_index: BTreeMap<u64, Vec<usize>>,
+    /// For slab nodes without metadata
+    no_ctime_index: BTreeSet<usize>,
+    no_mtime_index: BTreeSet<usize>,
+    no_size_index: BTreeSet<usize>,
+}
+
+impl MetadataCache {
+    fn new() -> Self {
+        Self {
+            ctime_index: BTreeMap::new(),
+            mtime_index: BTreeMap::new(),
+            size_index: BTreeMap::new(),
+            no_ctime_index: BTreeSet::new(),
+            no_mtime_index: BTreeSet::new(),
+            no_size_index: BTreeSet::new(),
+        }
+    }
+
+    fn insert(&mut self, index: usize, metadata: Option<NodeMetadata>) {
+        if let Some(ctime) = metadata.and_then(|x| x.ctime) {
+            if let Some(indexes) = self.ctime_index.get_mut(&ctime) {
+                if !indexes.iter().any(|&x| x == index) {
+                    indexes.push(index);
+                }
+            } else {
+                self.ctime_index.insert(ctime, vec![index]);
+            }
+        } else {
+            self.no_ctime_index.insert(index);
+        }
+        if let Some(mtime) = metadata.and_then(|x| x.mtime) {
+            if let Some(indexes) = self.mtime_index.get_mut(&mtime) {
+                if !indexes.iter().any(|&x| x == index) {
+                    indexes.push(index);
+                }
+            } else {
+                self.mtime_index.insert(mtime, vec![index]);
+            }
+        } else {
+            self.no_mtime_index.insert(index);
+        }
+        if let Some(size) = metadata.map(|x| x.size) {
+            if let Some(indexes) = self.size_index.get_mut(&size) {
+                if !indexes.iter().any(|&x| x == index) {
+                    indexes.push(index);
+                }
+            } else {
+                self.size_index.insert(size, vec![index]);
+            }
+        } else {
+            self.no_size_index.insert(index);
+        }
+    }
+
+    fn remove(&mut self, index: usize, metadata: Option<NodeMetadata>) {
+        if let Some(ctime) = metadata.and_then(|x| x.ctime) {
+            if let Some(indexes) = self.ctime_index.get_mut(&ctime) {
+                indexes.retain(|&x| x != index);
+                if indexes.is_empty() {
+                    self.ctime_index.remove(&ctime);
+                }
+            }
+        } else {
+            self.no_ctime_index.remove(&index);
+        }
+        if let Some(mtime) = metadata.and_then(|x| x.mtime) {
+            if let Some(indexes) = self.mtime_index.get_mut(&mtime) {
+                indexes.retain(|&x| x != index);
+                if indexes.is_empty() {
+                    self.mtime_index.remove(&mtime);
+                }
+            }
+        } else {
+            self.no_mtime_index.remove(&index);
+        }
+        if let Some(size) = metadata.map(|x| x.size) {
+            if let Some(indexes) = self.size_index.get_mut(&size) {
+                indexes.retain(|&x| x != index);
+                if indexes.is_empty() {
+                    self.size_index.remove(&size);
+                }
+            }
+        } else {
+            self.no_size_index.remove(&index);
+        }
     }
 }
 

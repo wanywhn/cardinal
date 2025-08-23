@@ -1,4 +1,4 @@
-use crate::cache::SlabNode;
+use crate::{cache::SlabNode, MetadataCache};
 use anyhow::{Context, Result};
 use bincode::{config::Configuration, Decode, Encode};
 use slab::Slab;
@@ -26,6 +26,7 @@ pub struct PersistentStorage {
     pub slab_root: usize,
     pub slab: Slab<SlabNode>,
     pub name_index: BTreeMap<String, Vec<usize>>,
+    pub metadata_cache: MetadataCache,
 }
 
 const BINCODE_CONDFIG: Configuration = bincode::config::standard();
