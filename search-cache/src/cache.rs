@@ -390,13 +390,7 @@ impl SearchCache {
         // For incremental data, we need metadata
         let walk_data = WalkData::new(PathBuf::from("/System/Volumes/Data"), true);
         walk_it(raw_path, &walk_data).map(|node| {
-            let node = create_node_slab_update_name_index_and_name_pool(
-                Some(parent),
-                &node,
-                &mut self.slab,
-                &mut self.name_index,
-                &mut self.name_pool,
-            );
+            let node = self.create_node_slab_update_name_index_and_name_pool(Some(parent), &node);
             // Push the newly created node to the parent's children
             self.slab[parent].add_children(node);
             node
@@ -642,51 +636,34 @@ fn construct_node_slab(parent: Option<usize>, node: &Node, slab: &mut Slab<SlabN
     index
 }
 
-/// ATTENTION: This function doesn't remove existing node, you should remove it
-/// before creating the new subtree, or the old subtree nodes will be dangling.
-///
-/// ATTENTION1: This function should only called with Node fetched with metadata.
-fn create_node_slab_update_name_index_and_name_pool(
-    parent: Option<usize>,
-    node: &Node,
-    slab: &mut Slab<SlabNode>,
-    name_index: &mut BTreeMap<String, Vec<usize>>,
-    name_pool: &mut NamePool,
-) -> usize {
-    let slab_node = SlabNode {
-        parent,
-        children: vec![],
-        name: node.name.clone(),
-        metadata: match node.metadata {
-            Some(metadata) => SlabNodeMetadata::Some(metadata),
-            // This function should only be called with Node fetched with metadata
-            None => SlabNodeMetadata::Unaccessible,
-        },
-    };
-    let index = slab.insert(slab_node);
-    if let Some(indexes) = name_index.get_mut(&node.name) {
-        // TODO(ldm0): optimize to binary search?
-        if !indexes.iter().any(|&x| x == index) {
-            indexes.push(index);
-        }
-    } else {
-        name_pool.push(&node.name);
-        name_index.insert(node.name.clone(), vec![index]);
+impl SearchCache {
+    /// ATTENTION: This function doesn't remove existing node, you should remove it
+    /// before creating the new subtree, or the old subtree nodes will be dangling.
+    ///
+    /// ATTENTION1: This function should only called with Node fetched with metadata.
+    fn create_node_slab_update_name_index_and_name_pool(
+        &mut self,
+        parent: Option<usize>,
+        node: &Node,
+    ) -> usize {
+        let slab_node = SlabNode {
+            parent,
+            children: vec![],
+            name: node.name.clone(),
+            metadata: match node.metadata {
+                Some(metadata) => SlabNodeMetadata::Some(metadata),
+                // This function should only be called with Node fetched with metadata
+                None => SlabNodeMetadata::Unaccessible,
+            },
+        };
+        let index = self.push_node(slab_node);
+        self.slab[index].children = node
+            .children
+            .iter()
+            .map(|node| self.create_node_slab_update_name_index_and_name_pool(Some(index), node))
+            .collect();
+        index
     }
-    slab[index].children = node
-        .children
-        .iter()
-        .map(|node| {
-            create_node_slab_update_name_index_and_name_pool(
-                Some(index),
-                node,
-                slab,
-                name_index,
-                name_pool,
-            )
-        })
-        .collect();
-    index
 }
 
 fn name_pool(name_index: &BTreeMap<String, Vec<usize>>) -> NamePool {
