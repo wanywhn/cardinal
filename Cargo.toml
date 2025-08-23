@@ -5,7 +5,6 @@ members = [
     "cardinal-sdk",
     "fswalk",
     "namepool",
-    "pathbytes",
     "was",
     "lsf-tui",
     "query-segmentation",

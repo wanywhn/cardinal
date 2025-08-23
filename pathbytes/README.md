@@ -1,1 +1,0 @@
-A highly unsafe crate, works correctly on windows if the implementation of OsString is Wtf8.
