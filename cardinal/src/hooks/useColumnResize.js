@@ -3,7 +3,6 @@ import { calculateInitialColWidths, MAX_COL_WIDTH, MIN_COL_WIDTH } from '../cons
 
 export function useColumnResize() {
   const [colWidths, setColWidths] = useState(() => {
-    // 初始化时根据窗口宽度计算列宽
     const windowWidth = window.innerWidth;
     return calculateInitialColWidths(windowWidth);
   });
@@ -13,15 +12,24 @@ export function useColumnResize() {
     e.preventDefault();
     e.stopPropagation();
     
-    resizingRef.current = { 
-      key, 
-      startX: e.clientX, 
-      startW: colWidths[key] 
+    const startX = e.clientX;
+    const startWidth = colWidths[key];
+    
+    const handleMouseMove = (e) => {
+      const delta = e.clientX - startX;
+      const newWidth = Math.max(MIN_COL_WIDTH, Math.min(MAX_COL_WIDTH, startWidth + delta));
+      setColWidths(prev => ({ ...prev, [key]: newWidth }));
     };
     
-    window.addEventListener('mousemove', onResizing);
-    window.addEventListener('mouseup', onResizeEnd, { once: true });
+    const handleMouseUp = () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+      document.body.style.userSelect = '';
+      document.body.style.cursor = '';
+    };
     
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
     document.body.style.userSelect = 'none';
     document.body.style.cursor = 'col-resize';
   }, [colWidths]);
@@ -31,25 +39,6 @@ export function useColumnResize() {
     const newColWidths = calculateInitialColWidths(windowWidth);
     setColWidths(newColWidths);
   }, []);
-
-  const onResizing = useCallback((e) => {
-    const ctx = resizingRef.current;
-    if (!ctx) return;
-    
-    const delta = e.clientX - ctx.startX;
-    const minW = MIN_COL_WIDTH; // 最小宽度限制
-    const maxW = MAX_COL_WIDTH; // 最大宽度限制
-    const nextW = Math.max(minW, Math.min(maxW, ctx.startW + delta));
-    
-    setColWidths((w) => ({ ...w, [ctx.key]: nextW }));
-  }, []);
-
-  const onResizeEnd = useCallback(() => {
-    resizingRef.current = null;
-    window.removeEventListener('mousemove', onResizing);
-    document.body.style.userSelect = '';
-    document.body.style.cursor = '';
-  }, [onResizing]);
 
   return {
     colWidths,

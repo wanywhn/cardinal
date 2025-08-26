@@ -17,6 +17,7 @@
   --color-elevated-border: #dee2e6;
   --color-resizer: #dee2e6;
   --color-accent: #0d6efd;
+  --color-accent-rgb: 13, 110, 253;
   --row-even: #ffffff;
   --row-odd: #f7f8fa;
   --row-hover: rgb(220, 220, 220);
@@ -35,11 +36,12 @@
   /* Layout tokens */
   --row-height: 24px;                /* 与虚拟列表 rowHeight 同步 */
   --col-gap: 12px;                   /* 列之间的间隙 */
-  --columns-extra: 20px;             /* 额外宽度补偿，需与JS columnsTotal 一致 */
+  --columns-extra: 10px;             /* 额外宽度补偿调小避免溢出，应与 JS COLUMNS_EXTRA 保持一致 */
   --col-min-width: 30px;             /* 列宽最小值 */
   --col-max-width: 10000px;          /* 列宽最大值 */
   --container-padding: 10px;
-  /* 去除自定义滚动条相关变量 */
+  /* Horizontal padding for header & data cells */
+  --cell-hpad: 0.4rem;
 }
 
 * {
@@ -54,6 +56,9 @@
   user-select: none;
   /* 禁止文本光标 */
   cursor: default;
+  overscroll-behavior: none;
+  /* 禁用 Safari WebView 的橡皮筋滚动效果 */
+  -webkit-overflow-scrolling: touch;
 }
 
 /* === Global Resets === */
@@ -62,10 +67,7 @@ html,
 body {
   height: 100%;
   overflow: hidden;
-  overscroll-behavior: none;
   font-family: var(--font-sans);
-  /* 禁用 Safari WebView 的橡皮筋滚动效果 */
-  -webkit-overflow-scrolling: touch;
   position: fixed;
   width: 100%;
 }
@@ -81,25 +83,21 @@ main,
 
 .container {
   margin: 0;
-  padding: var(--container-padding);
-  padding-bottom: calc(var(--container-padding) + 24px); /* 为状态栏留出空间 */
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-rows: auto 1fr auto; /* search bar | scroll area | status bar */
+  grid-template-columns: 100%;
   text-align: center;
   height: 100vh;
-  /* Make container fill the viewport height */
   box-sizing: border-box;
   gap: 0.25rem;
-  /* 禁用橡皮筋滚动效果 */
-  overscroll-behavior: none;
-  position: relative;
 }
 
 /* === Search Bar === */
 .search-container {
   display: flex;
   justify-content: center;
-  margin-bottom: 0.25rem;
+  margin-top: var(--container-padding);
+  padding: 0 var(--container-padding);
 }
 
 #search-input {
@@ -152,10 +150,12 @@ button:active {
 /* === Results Area === */
 .results-container {
   text-align: left;
-  flex: 1;
   width: 100%;
-  height: 100%;
+  /* 高度由 grid 第二行自动撑开 */
   position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 0; /* 允许内部内容正确收缩，防止撑开 grid 行 */
   /* 允许内部绝对定位竖直滚动条 */
   --columns-total: calc(
     var(--w-filename, 240px)
@@ -169,23 +169,15 @@ button:active {
 }
 
 .scroll-area {
-  overflow: hidden; /* 外层容器不显示滚动条 */
+  overflow: hidden; /* 外层容器不显示自己的滚动条，但允许子元素滚动 */
   height: 100%;
+  flex: 1;
   display: flex;
   flex-direction: column;
-  /* 禁用橡皮筋滚动效果 */
-  overscroll-behavior: none;
-  -webkit-overflow-scrolling: touch;
+  min-height: 0; /* 防止子元素撑破 */
+  padding: 0 var(--container-padding);
 }
 
-/* Grid 内部处理所有滚动 */
-.ReactVirtualized__Grid {
-  overflow: auto !important;
-  /* 禁用橡皮筋滚动效果 */
-  overscroll-behavior: none;
-  -webkit-overflow-scrolling: touch;
-  z-index: 2; /* 确保滚动条显示在 spinner 之上 */
-}
 
 /* === Columns (Grid) === */
 .columns {
@@ -217,7 +209,8 @@ button:active {
   top: 0;
   z-index: 1;
   background: inherit;
-  padding: 6px 10px;
+  /* 去除左右 10px 以与行 (.row) 宽度对齐，避免列集合总宽度外再加 padding 导致溢出 */
+  padding: 6px 0;
   border-bottom: 1px solid var(--color-border);
   font-size: 12px;
 }
@@ -229,7 +222,8 @@ button:active {
 
 .header-cell {
   position: relative;
-  padding-right: 6px;
+  /* Horizontal padding via variable */
+  padding: 0 var(--cell-hpad);
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -271,26 +265,102 @@ button:active {
 .virtual-list {
   height: 100%;
   flex: 1;
+  overflow-y: auto;   /* 允许垂直滚动 */
+  overflow-x: auto;   /* 允许水平滚动，并显示滚动条 */
 }
 
+/* 隐藏垂直滚动条，但保留水平滚动条 */
 .virtual-list::-webkit-scrollbar {
-  display: none;
+  width: 10px;         /* 垂直滚动条宽度为0（隐藏） */
+  height: 18px;       /* 水平滚动条高度 */
 }
 
-/* 让虚拟列表使用原生滚动条 */
-.ReactVirtualized__Grid {
-  overflow: auto !important;
+.virtual-list::-webkit-scrollbar-track {
+  background: var(--color-elevated-bg);
+  border-radius: 6px;
 }
+
+.virtual-list::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 6px;
+}
+
+.virtual-list::-webkit-scrollbar-thumb:hover {
+  background: var(--color-muted);
+}
+
+/* Firefox */
+.virtual-list {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-border) var(--color-elevated-bg);
+}
+
+/* === Empty State === */
+.empty-state {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  color: var(--color-muted);
+  text-align: center;
+  pointer-events: none;
+  animation: fadeIn 0.25s ease;
+}
+
+.empty-icon {
+  color: var(--color-border);
+  opacity: 0.8;
+  transform: translateY(-8px);
+}
+
+.empty-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--color-header);
+}
+
+.empty-desc {
+  font-size: 13px;
+  color: var(--color-muted);
+  max-width: 360px;
+}
+
+.empty-tips {
+  list-style: none;
+  margin: 4px 0 0 0;
+  padding: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--color-muted);
+  max-width: 360px;
+  opacity: 0.85;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: scale(.98); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@media (prefers-color-scheme: dark) {
+  .empty-icon { color: var(--color-resizer); }
+  .empty-title { color: var(--color-text); }
+}
+
 
 /* Rows (rendered inside virtual list) */
 /* === Rows & Cells === */
 .row {
-  padding: 5px 10px;
+  /* 去掉水平内边距以避免总宽度 (列总宽度 + padding) 造成轻微溢出 */
+  padding: 5px 0; /* 原为 5px 10px */
   box-sizing: border-box;
-  white-space: nowrap;
-  /* 防止文本换行 */
-  /* 允许父容器进行水平滚动时可见溢出的列内容 */
-  overflow: visible;
+  white-space: nowrap; /* 防止文本换行 */
+  overflow: visible; /* 允许父容器水平滚动时显示列内容 */
   background-color: var(--row-even);
   border-radius: 6px;
   display: flex;
@@ -315,12 +385,15 @@ button:active {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+  /* Horizontal padding for data cells */
+  padding: 0 var(--cell-hpad);
 }
 
 .filename-text {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+  padding: 0 var(--cell-hpad);
 }
 
 /* Common meta cell styles */
@@ -333,6 +406,7 @@ button:active {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  padding: 0 var(--cell-hpad);
 }
 
 .size-text {
@@ -342,6 +416,68 @@ button:active {
 /* Utility */
 .muted {
   opacity: 0.6;
+}
+
+/* Loading state styles */
+.row.loading {
+  opacity: 0.7;
+}
+
+.loading-text {
+  color: var(--color-muted);
+  font-style: italic;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 0.6;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes searchPulse {
+  0%, 100% {
+    opacity: 0.7;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+/* Search placeholder styles */
+.search-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  min-height: 200px;
+}
+
+.search-placeholder-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  color: var(--color-accent);
+  font-size: 16px;
+  font-weight: 500;
+}
+
+.search-spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid rgba(var(--color-accent-rgb), 0.2);
+  border-top: 3px solid var(--color-accent);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
 }
 
 

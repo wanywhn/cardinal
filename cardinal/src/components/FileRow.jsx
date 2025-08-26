@@ -4,7 +4,18 @@ import { formatKB } from '../utils/format';
 
 export function FileRow({ item, rowIndex, style, onContextMenu, searchQuery }) {
   if (!item) {
-    return <div key={`empty-${rowIndex}`} style={style} />;
+    // 显示加载状态而不是空白
+    return (
+      <div key={`loading-${rowIndex}`} style={style} className={`row ${rowIndex % 2 === 0 ? 'row-even' : 'row-odd'} loading`}>
+        <div className="columns row-inner">
+          <span className="filename-text loading-text">Loading...</span>
+          <span className="path-text loading-text">—</span>
+          <span className="size-text loading-text">—</span>
+          <span className="mtime-text loading-text">—</span>
+          <span className="ctime-text loading-text">—</span>
+        </div>
+      </div>
+    );
   }
 
   const path = typeof item === 'string' ? item : item?.path;
@@ -27,23 +38,13 @@ export function FileRow({ item, rowIndex, style, onContextMenu, searchQuery }) {
   };
 
   return (
-    <div
-      style={style}
-      className={`row ${rowIndex % 2 === 0 ? 'row-even' : 'row-odd'}`}
-      onContextMenu={handleContextMenu}
-    >
+  <div style={style} className={`row ${rowIndex % 2 === 0 ? 'row-even' : 'row-odd'}`} onContextMenu={handleContextMenu}>
       <div className="columns row-inner" title={path}>
         <MiddleEllipsisHighlight className="filename-text" text={filename} searchQuery={searchQuery} />
         <MiddleEllipsisHighlight className="path-text" text={path} searchQuery={searchQuery} />
-        <span className={`size-text ${!sizeText ? 'muted' : ''}`}>
-          {sizeText || '—'}
-        </span>
-        <span className={`mtime-text ${!mtimeText ? 'muted' : ''}`}>
-          {mtimeText || '—'}
-        </span>
-        <span className={`ctime-text ${!ctimeText ? 'muted' : ''}`}>
-          {ctimeText || '—'}
-        </span>
+    <span className={`size-text ${!sizeText ? 'muted' : ''}`}>{sizeText || '—'}</span>
+    <span className={`mtime-text ${!mtimeText ? 'muted' : ''}`}>{mtimeText || '—'}</span>
+    <span className={`ctime-text ${!ctimeText ? 'muted' : ''}`}>{ctimeText || '—'}</span>
       </div>
     </div>
   );

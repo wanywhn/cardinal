@@ -1,55 +1,68 @@
-import React, { useRef, useCallback, useEffect } from "react";
-import { InfiniteLoader, Grid, AutoSizer } from 'react-virtualized';
-import 'react-virtualized/styles.css';
-import "./App.css";
-import { ContextMenu } from "./components/ContextMenu";
-import { ColumnHeader } from "./components/ColumnHeader";
-import { FileRow } from "./components/FileRow";
-import StatusBar from "./components/StatusBar";
-import { useAppState, useSearch, useVirtualizedList, useHeaderContextMenu } from "./hooks";
-import { useColumnResize } from "./hooks/useColumnResize";
-import { useContextMenu } from "./hooks/useContextMenu";
-import { ROW_HEIGHT, OVERSCAN_ROW_COUNT, calculateColumnsTotal } from "./constants";
+import React, { useRef, useCallback, useEffect } from 'react';
+import './App.css';
+import { ContextMenu } from './components/ContextMenu';
+import { ColumnHeader } from './components/ColumnHeader';
+import { FileRow } from './components/FileRow';
+import StatusBar from './components/StatusBar';
+import { useAppState, useSearch, useRowData } from './hooks';
+import { useColumnResize } from './hooks/useColumnResize';
+import { useContextMenu } from './hooks/useContextMenu';
+import { ROW_HEIGHT, OVERSCAN_ROW_COUNT } from './constants';
+import { VirtualList } from './components/VirtualList';
 
 function App() {
   const { results, setResults, isInitialized, scannedFiles, processedEvents } = useAppState();
   const { colWidths, onResizeStart, autoFitColumns } = useColumnResize();
-  const { lruCache, infiniteLoaderRef, isCellLoaded, loadMoreRows } = useVirtualizedList(results);
-  const { contextMenu, showContextMenu, closeContextMenu, menuItems } = useContextMenu();
-  const { headerContextMenu, showHeaderContextMenu, closeHeaderContextMenu, headerMenuItems } = useHeaderContextMenu(autoFitColumns);
-  const { onQueryChange, currentQuery } = useSearch(setResults, lruCache);
+  const { getItem, ensureRangeLoaded } = useRowData(results);
+  const { 
+    contextMenu, showContextMenu, closeContextMenu, menuItems,
+    headerContextMenu, showHeaderContextMenu, closeHeaderContextMenu, headerMenuItems 
+  } = useContextMenu(autoFitColumns);
+  const { onQueryChange, currentQuery, showLoadingUI, initialFetchCompleted } = useSearch(setResults);
   
   const headerRef = useRef(null);
-  const listRef = useRef(null);
   const scrollAreaRef = useRef(null);
+  const virtualListRef = useRef(null);
+  const prevQueryRef = useRef('');
+  const prevResultsLenRef = useRef(0);
 
-  // 当列宽改变时，重新计算Grid尺寸
+  // 当搜索结果更新时，立即预加载前面的数据并重置滚动位置
   useEffect(() => {
-    if (listRef.current && listRef.current.recomputeGridSize) {
-      listRef.current.recomputeGridSize();
+    if (results.length > 0) {
+      const isNewQuery = prevQueryRef.current !== currentQuery;
+      const wasEmpty = prevResultsLenRef.current === 0;
+
+      // 仅在新查询的第一次结果出现时滚动到顶部
+      if (isNewQuery && virtualListRef.current) {
+        virtualListRef.current.scrollToTop();
+      }
+
+      // 预加载：新查询第一次出现结果 或 之前为空（首次流式填充）
+      if (isNewQuery || wasEmpty) {
+        const estimatedViewportHeight = 600; // 默认估计高度, 无法测量时的备选
+        const visibleRows = Math.ceil(estimatedViewportHeight / ROW_HEIGHT);
+        const preloadCount = Math.min(visibleRows + OVERSCAN_ROW_COUNT * 2, results.length);
+        ensureRangeLoaded(0, preloadCount - 1);
+      }
     }
-  }, [colWidths]);
+    prevQueryRef.current = currentQuery;
+    prevResultsLenRef.current = results.length;
+  }, [results, currentQuery, ensureRangeLoaded]);
 
   // 滚动同步处理 - 单向同步版本（Grid -> Header）
-  const handleGridScroll = useCallback(({ scrollLeft }) => {
-    if (headerRef.current) {
-      headerRef.current.scrollLeft = scrollLeft;
-    }
+  const handleHorizontalSync = useCallback((scrollLeft) => {
+    if (headerRef.current) headerRef.current.scrollLeft = scrollLeft;
   }, []);
 
   // 单元格渲染
-  const cellRenderer = ({ columnIndex, key, rowIndex, style }) => {
-    // Grid只渲染一列，但我们把整行内容放在第一列
-    if (columnIndex !== 0) return null;
-    
-    const item = lruCache.current.get(rowIndex);
-    
+  const renderRow = (rowIndex, rowStyle) => {
+    const item = getItem(rowIndex);
     return (
       <FileRow
-        key={key}
+        key={rowIndex}
         item={item}
         rowIndex={rowIndex}
-        style={style}
+        style={{ ...rowStyle, width: 'var(--columns-total)' }}
         onContextMenu={showContextMenu}
         searchQuery={currentQuery}
       />
@@ -80,47 +93,33 @@ function App() {
         }}
       >
         <div className="scroll-area" ref={scrollAreaRef}>
-          <ColumnHeader 
-            ref={headerRef} 
-            colWidths={colWidths} 
+          <ColumnHeader
+            ref={headerRef}
             onResizeStart={onResizeStart}
             onContextMenu={showHeaderContextMenu}
           />
           <div style={{ flex: 1, minHeight: 0 }}>
-            <InfiniteLoader
-              ref={infiniteLoaderRef}
-              isRowLoaded={isCellLoaded}
-              loadMoreRows={loadMoreRows}
-              rowCount={results.length}
-            >
-              {({ onRowsRendered, registerChild }) => (
-                <AutoSizer>
-                  {({ height, width }) => {
-                    const columnsTotal = calculateColumnsTotal(colWidths);
-                    return (
-                      <Grid
-                        ref={el => {
-                          registerChild(el);
-                          listRef.current = el;
-                        }}
-                        onSectionRendered={({ rowStartIndex, rowStopIndex }) => 
-                          onRowsRendered({ startIndex: rowStartIndex, stopIndex: rowStopIndex })
-                        }
-                        onScroll={handleGridScroll}
-                        width={width}
-                        height={height}
-                        rowCount={results.length}
-                        columnCount={1}
-                        rowHeight={ROW_HEIGHT}
-                        columnWidth={columnsTotal}
-                        cellRenderer={cellRenderer}
-                        overscanRowCount={OVERSCAN_ROW_COUNT}
-                      />
-                    );
-                  }}
-                </AutoSizer>
-              )}
-            </InfiniteLoader>
+            {/* 当搜索中且显示loading UI时，显示搜索占位符 */}
+      {showLoadingUI || !initialFetchCompleted ? (
+              <div className="search-placeholder">
+                <div className="search-placeholder-content">
+                  <div className="search-spinner"></div>
+                  <span>Searching...</span>
+                </div>
+              </div>
+            ) : (
+              <VirtualList
+                ref={virtualListRef}
+                rowCount={results.length}
+                rowHeight={ROW_HEIGHT}
+                overscan={OVERSCAN_ROW_COUNT}
+                renderRow={renderRow}
+                onRangeChange={ensureRangeLoaded}
+                onScrollSync={handleHorizontalSync}
+                className="virtual-list"
+                showEmptyState={initialFetchCompleted && !showLoadingUI}
+              />
+            )}
           </div>
         </div>
       </div>

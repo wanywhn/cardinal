@@ -25,7 +25,7 @@ export const calculateInitialColWidths = (windowWidth) => {
 };
 
 export const COL_GAP = 12;
-export const COLUMNS_EXTRA = 20;
+export const COLUMNS_EXTRA = 20; // 与 CSS --columns-extra 一致，避免多余宽度溢出
 export const ROW_HEIGHT = 24;
 export const CONTAINER_PADDING = 10;
 

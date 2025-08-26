@@ -1,8 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen, once } from '@tauri-apps/api/event';
-import { LRUCache } from '../utils/LRUCache';
-import { CACHE_SIZE, SEARCH_DEBOUNCE_MS } from '../constants';
+import { SEARCH_DEBOUNCE_MS } from '../constants';
 
 export function useAppState() {
   const [results, setResults] = useState([]);
@@ -28,20 +27,47 @@ export function useAppState() {
   };
 }
 
-export function useSearch(setResults, lruCache) {
+export function useSearch(setResults) {
   const debounceTimerRef = useRef(null);
+  const loadingDelayTimerRef = useRef(null);
   const [currentQuery, setCurrentQuery] = useState('');
   const [hasInitialSearchRun, setHasInitialSearchRun] = useState(false);
+  const [showLoadingUI, setShowLoadingUI] = useState(false);
+  const [initialFetchCompleted, setInitialFetchCompleted] = useState(false);
 
   const handleSearch = useCallback(async (query) => {
-    let searchResults = [];
-    searchResults = await invoke("search", { query });
-    lruCache.current.clear();
-    setResults(searchResults);
-    setCurrentQuery(query.trim());
-  }, [setResults, lruCache]);
+    const isInitial = !hasInitialSearchRun;
+    // 初始搜索立即进入 loading；后续搜索使用延迟避免闪烁
+    if (isInitial) {
+      setShowLoadingUI(true);
+    } else {
+      loadingDelayTimerRef.current = setTimeout(() => {
+        setResults([]);
+        setShowLoadingUI(true);
+      }, 150);
+    }
+    
+    try {
+      const searchResults = await invoke("search", { query });
+      
+      // 清除延迟timer
+      if (loadingDelayTimerRef.current) {
+        clearTimeout(loadingDelayTimerRef.current);
+        loadingDelayTimerRef.current = null;
+      }
+      
+      setResults(searchResults);
+      setCurrentQuery(query.trim());
+    setShowLoadingUI(false);
+    if (!initialFetchCompleted) setInitialFetchCompleted(true);
+    } catch (error) {
+      console.error('Search failed:', error);
+      setShowLoadingUI(false);
+    if (!initialFetchCompleted) setInitialFetchCompleted(true); // 即使失败也结束初始加载状态
+    }
+  }, [setResults, hasInitialSearchRun, initialFetchCompleted]);
 
-  // 应用启动时发送空查询
+  // 初始搜索
   useEffect(() => {
     if (!hasInitialSearchRun) {
       handleSearch("");
@@ -58,39 +84,21 @@ export function useSearch(setResults, lruCache) {
     }, SEARCH_DEBOUNCE_MS);
   }, [handleSearch]);
 
-  return { onQueryChange, currentQuery };
-}
-
-export function useVirtualizedList(results) {
-  const lruCache = useRef(new LRUCache(CACHE_SIZE));
-  const infiniteLoaderRef = useRef(null);
-
+  // 清理定时器
   useEffect(() => {
-    if (infiniteLoaderRef.current) {
-      infiniteLoaderRef.current.resetLoadMoreRowsCache(true);
-    }
-  }, [results]);
+    return () => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+      if (loadingDelayTimerRef.current) {
+        clearTimeout(loadingDelayTimerRef.current);
+      }
+    };
+  }, []);
 
-  const isCellLoaded = useCallback(({ rowIndex }) => 
-    lruCache.current.has(rowIndex), []);
-
-  const loadMoreRows = useCallback(async ({ startIndex, stopIndex }) => {
-    const rows = results.slice(startIndex, stopIndex + 1);
-    const searchResults = await invoke("get_nodes_info", { results: rows });
-    for (let i = startIndex; i <= stopIndex; i++) {
-      lruCache.current.put(i, searchResults[i - startIndex]);
-    }
-  }, [results]);
-
-  return {
-    lruCache,
-    infiniteLoaderRef,
-    isCellLoaded,
-    loadMoreRows
-  };
+  return { onQueryChange, currentQuery, showLoadingUI, initialFetchCompleted };
 }
 
-// Re-export other hooks
+export { useRowData } from './useRowData';
 export { useColumnResize } from './useColumnResize';
 export { useContextMenu } from './useContextMenu';
-export { useHeaderContextMenu } from './useHeaderContextMenu';
