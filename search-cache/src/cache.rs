@@ -242,7 +242,7 @@ impl SearchCache {
     pub fn search(&self, line: &str) -> Result<Vec<usize>> {
         let segments = query_segmentation(line);
         if segments.is_empty() {
-            bail!("Unprocessable query: {:?}", segments);
+            bail!("Unprocessable query: {:?}", line);
         }
         let search_time = Instant::now();
         let mut node_set: Option<Vec<usize>> = None;
