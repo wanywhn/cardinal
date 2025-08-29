@@ -158,11 +158,11 @@ button:active {
   min-height: 0; /* 允许内部内容正确收缩，防止撑开 grid 行 */
   /* 允许内部绝对定位竖直滚动条 */
   --columns-total: calc(
-    var(--w-filename, 240px)
-    + var(--w-path, 600px)
-    + var(--w-size, 120px)
-    + var(--w-modified, 180px)
-    + var(--w-created, 180px)
+    var(--w-filename)
+    + var(--w-path)
+    + var(--w-size)
+    + var(--w-modified)
+    + var(--w-created)
     + (4 * var(--col-gap))
     + var(--columns-extra)
   );
@@ -182,7 +182,7 @@ button:active {
 /* === Columns (Grid) === */
 .columns {
   display: grid;
-  grid-template-columns: var(--w-filename, 240px) var(--w-path, 600px) var(--w-size, 120px) var(--w-modified, 180px) var(--w-created, 180px);
+  grid-template-columns: var(--w-filename) var(--w-path) var(--w-size) var(--w-modified) var(--w-created);
   column-gap: var(--col-gap);
   align-items: center;
   /* Mirror previous JS total width: 3 gaps * 12px + horizontal padding (10px left + 10px right) */
