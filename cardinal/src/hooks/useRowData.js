@@ -48,9 +48,7 @@ export function useRowData(results) {
     }
   }, [results, cache]);
 
-  const getItem = useCallback((index) => {
-    return cache.get(index);
-  }, [cache, results, ensureRangeLoaded]);
+  const getItem = (index) => cache.get(index);
 
   return { getItem, ensureRangeLoaded };
 }
