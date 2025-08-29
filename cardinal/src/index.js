@@ -11,7 +11,6 @@ export { useAppState, useSearch } from './hooks';
 export { useColumnResize } from './hooks/useColumnResize';
 export { useContextMenu } from './hooks/useContextMenu';
 // Utils
-export { LRUCache } from './utils/LRUCache';
 export { formatBytes, formatKB } from './utils/format';
 // Constants
 export * from './constants';
