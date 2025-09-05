@@ -1,6 +1,6 @@
-use crate::{cache::SlabNode, MetadataCache};
+use crate::{MetadataCache, cache::SlabNode};
 use anyhow::{Context, Result};
-use bincode::{config::Configuration, Decode, Encode};
+use bincode::{Decode, Encode, config::Configuration};
 use slab::Slab;
 use std::{
     collections::BTreeMap,
