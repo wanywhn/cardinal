@@ -38,6 +38,8 @@
     + 问题在于并行读写的正确处理，如 parent 消失场景
         + fsevent 改 slab 结构， metadata fetching 只增添 metadata 不改 slab 结构
 + 修复严重的内存泄漏 in fs-icon
++ namepool 里面想要去重就用一个附属的hashset就行了（fnv hashset 不存储内容，只有hash）
+    + 只 insert 去重，不 remove 不覆盖，否则之前的 index 会失效（坏处就是如果一直有不重名的文件创建，name pool 会越来越大
 
 ```bash
 npm run tauri dev -- --release --features dev
