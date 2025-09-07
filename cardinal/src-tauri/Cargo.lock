@@ -1110,9 +1110,13 @@ name = "fs-icon"
 version = "0.1.0"
 dependencies = [
  "block2 0.6.1",
+ "crossbeam-channel",
  "objc2 0.6.2",
  "objc2-app-kit",
+ "objc2-core-foundation",
  "objc2-foundation 0.3.1",
+ "objc2-image-io",
+ "objc2-quick-look-thumbnailing",
 ]
 
 [[package]]
@@ -2371,7 +2375,9 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1c10c2894a6fed806ade6027bcd50662746363a9589d3ec9d9bef30a4e4bc166"
 dependencies = [
  "bitflags 2.9.1",
+ "block2 0.6.1",
  "dispatch2 0.3.0",
+ "libc",
  "objc2 0.6.2",
 ]
 
@@ -2439,6 +2445,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "objc2-image-io"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a93be3ea4abbfee918e60538c9c49cf8ca66640765323b69cf236c5914440464"
+dependencies = [
+ "block2 0.6.1",
+ "objc2 0.6.2",
+ "objc2-core-foundation",
+ "objc2-core-graphics",
+]
+
+[[package]]
 name = "objc2-io-surface"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2483,6 +2501,22 @@ dependencies = [
  "bitflags 2.9.1",
  "objc2 0.6.2",
  "objc2-foundation 0.3.1",
+]
+
+[[package]]
+name = "objc2-quick-look-thumbnailing"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f1b2a2e88aaec5f73faf940ec3b350e7cff007e8b015e1636d1a3ad963ab758e"
+dependencies = [
+ "bitflags 2.9.1",
+ "block2 0.6.1",
+ "objc2 0.6.2",
+ "objc2-app-kit",
+ "objc2-core-foundation",
+ "objc2-core-graphics",
+ "objc2-foundation 0.3.1",
+ "objc2-ui-kit",
 ]
 
 [[package]]

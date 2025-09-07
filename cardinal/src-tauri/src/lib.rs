@@ -87,7 +87,7 @@ async fn get_nodes_info(
                 .map(|SearchResultNode { path, metadata }| {
                     let icon = path
                         .to_str()
-                        .and_then(|s| fs_icon::icon_of_path(s))
+                        .and_then(fs_icon::icon_of_path)
                         .map(|data| {
                             format!(
                                 "data:image/png;base64,{}",
