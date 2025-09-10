@@ -1,4 +1,7 @@
-use crate::persistent::{PersistentStorage, read_cache_from_file, write_cache_to_file};
+use crate::{
+    OptionSlabIndex, SlabIndex, ThinSlab,
+    persistent::{PersistentStorage, read_cache_from_file, write_cache_to_file},
+};
 use anyhow::{Context, Result, anyhow, bail};
 use bincode::{Decode, Encode};
 use cardinal_sdk::{EventFlag, FsEvent, ScanType, current_event_id};
@@ -7,7 +10,6 @@ use fswalk::{Node, NodeMetadata, walk_it};
 use namepool::NamePool;
 use query_segmentation::{Segment, query_segmentation};
 use serde::{Deserialize, Serialize};
-use slab::Slab;
 use std::{
     collections::BTreeMap,
     ffi::{CString, OsStr},
@@ -20,32 +22,26 @@ use typed_num::Num;
 
 #[derive(Debug, Serialize, Deserialize, Encode, Decode)]
 pub struct SlabNode {
-    parent: usize,
-    children: Vec<usize>,
+    parent: OptionSlabIndex,
+    children: Vec<SlabIndex>,
     name: String,
     metadata: SlabNodeMetadata,
 }
 
 impl SlabNode {
-    pub fn parent(&self) -> Option<usize> {
-        // slab index starts from 0, therefore we can say if parent is usize::MAX, it means no parent
-        // small and dirty size optimization :(
-        if self.parent == usize::MAX {
-            None
-        } else {
-            Some(self.parent)
-        }
+    pub fn parent(&self) -> Option<SlabIndex> {
+        self.parent.to_option()
     }
 
-    pub fn add_children(&mut self, children: usize) {
+    pub fn add_children(&mut self, children: SlabIndex) {
         if !self.children.iter().any(|&x| x == children) {
             self.children.push(children);
         }
     }
 
-    pub fn new(parent: Option<usize>, name: String, metadata: SlabNodeMetadata) -> Self {
+    pub fn new(parent: Option<SlabIndex>, name: String, metadata: SlabNodeMetadata) -> Self {
         Self {
-            parent: parent.unwrap_or(usize::MAX),
+            parent: OptionSlabIndex::from_option(parent),
             children: vec![],
             name,
             metadata,
@@ -90,9 +86,9 @@ pub struct SearchResultNode {
 pub struct SearchCache {
     path: PathBuf,
     last_event_id: u64,
-    slab_root: usize,
-    slab: Slab<SlabNode>,
-    name_index: BTreeMap<String, Vec<usize>>,
+    slab_root: SlabIndex,
+    slab: ThinSlab<SlabNode>,
+    name_index: BTreeMap<String, Vec<SlabIndex>>,
     name_pool: NamePool,
 }
 
@@ -132,15 +128,7 @@ impl SearchCache {
                      slab,
                      name_index,
                      last_event_id,
-                 }| {
-                    Self::new(
-                        path,
-                        last_event_id,
-                        slab_root,
-                        slab,
-                        name_index,
-                    )
-                },
+                 }| { Self::new(path, last_event_id, slab_root, slab, name_index) },
             )
     }
 
@@ -158,7 +146,7 @@ impl SearchCache {
 
     /// This function is expected to be called with WalkData which metadata is not fetched.
     pub fn walk_fs_with_walk_data(path: PathBuf, walk_data: &WalkData) -> Self {
-        fn walkfs_to_slab(path: &Path, walk_data: &WalkData) -> (usize, Slab<SlabNode>) {
+        fn walkfs_to_slab(path: &Path, walk_data: &WalkData) -> (SlabIndex, ThinSlab<SlabNode>) {
             // 先多线程构建树形文件名列表(不能直接创建 slab 因为 slab 无法多线程构建(slab 节点有相互引用，不想加锁))
             let visit_time = Instant::now();
             let node = walk_it(path, &walk_data).expect("failed to walk");
@@ -170,7 +158,7 @@ impl SearchCache {
 
             // 然后创建 slab
             let slab_time = Instant::now();
-            let mut slab = Slab::new();
+            let mut slab = ThinSlab::new();
             let slab_root = construct_node_slab(None, &node, &mut slab);
             info!(
                 "Slab construction time: {:?}, slab root: {:?}, slab len: {:?}",
@@ -181,11 +169,11 @@ impl SearchCache {
 
             (slab_root, slab)
         }
-        fn name_index(slab: &Slab<SlabNode>) -> BTreeMap<String, Vec<usize>> {
+        fn name_index(slab: &ThinSlab<SlabNode>) -> BTreeMap<String, Vec<SlabIndex>> {
             // TODO(ldm0): Memory optimization can be done by letting name index reference the name in the pool(gc need to be considered though)
             fn construct_name_index(
-                slab: &Slab<SlabNode>,
-                name_index: &mut BTreeMap<String, Vec<usize>>,
+                slab: &ThinSlab<SlabNode>,
+                name_index: &mut BTreeMap<String, Vec<SlabIndex>>,
             ) {
                 // The slab is newly constructed, thus though slab.iter() iterates all slots, it won't waste too much.
                 for (i, node) in slab.iter() {
@@ -221,9 +209,9 @@ impl SearchCache {
     pub fn new(
         path: PathBuf,
         last_event_id: u64,
-        slab_root: usize,
-        slab: Slab<SlabNode>,
-        name_index: BTreeMap<String, Vec<usize>>,
+        slab_root: SlabIndex,
+        slab: ThinSlab<SlabNode>,
+        name_index: BTreeMap<String, Vec<SlabIndex>>,
     ) -> Self {
         // name pool construction speed is fast enough that caching it doesn't worth it.
         let name_pool = name_pool(&name_index);
@@ -237,7 +225,7 @@ impl SearchCache {
         }
     }
 
-    pub fn search_empty(&self) -> Vec<usize> {
+    pub fn search_empty(&self) -> Vec<SlabIndex> {
         self.name_index
             .values()
             .flatten()
@@ -245,13 +233,13 @@ impl SearchCache {
             .collect::<Vec<_>>()
     }
 
-    pub fn search(&self, line: &str) -> Result<Vec<usize>> {
+    pub fn search(&self, line: &str) -> Result<Vec<SlabIndex>> {
         let segments = query_segmentation(line);
         if segments.is_empty() {
             bail!("Unprocessable query: {:?}", line);
         }
         let search_time = Instant::now();
-        let mut node_set: Option<Vec<usize>> = None;
+        let mut node_set: Option<Vec<SlabIndex>> = None;
         for segment in &segments {
             if let Some(nodes) = &node_set {
                 let mut new_node_set = Vec::with_capacity(nodes.len());
@@ -311,7 +299,7 @@ impl SearchCache {
     }
 
     /// Get the path of the node in the slab.
-    pub fn node_path(&self, index: usize) -> Option<PathBuf> {
+    pub fn node_path(&self, index: SlabIndex) -> Option<PathBuf> {
         let mut current = index;
         let mut segments = vec![];
         while let Some(parent) = self.slab.get(current)?.parent() {
@@ -326,7 +314,7 @@ impl SearchCache {
         )
     }
 
-    fn push_node(&mut self, node: SlabNode) -> usize {
+    fn push_node(&mut self, node: SlabNode) -> SlabIndex {
         let node_name = node.name.clone();
         let index = self.slab.insert(node);
         if let Some(indexes) = self.name_index.get_mut(&node_name) {
@@ -341,7 +329,7 @@ impl SearchCache {
     }
 
     /// Removes a node by path and its children recursively.
-    fn remove_node_path(&mut self, path: &Path) -> Option<usize> {
+    fn remove_node_path(&mut self, path: &Path) -> Option<SlabIndex> {
         let mut current = self.slab_root;
         for name in path
             .components()
@@ -362,7 +350,7 @@ impl SearchCache {
     }
 
     // Blindly try create node chain, it doesn't check if the path is really exist on disk.
-    fn create_node_chain(&mut self, path: &Path) -> usize {
+    fn create_node_chain(&mut self, path: &Path) -> SlabIndex {
         let mut current = self.slab_root;
         let mut current_path = self.path.clone();
         for name in path
@@ -400,7 +388,7 @@ impl SearchCache {
     // `Self::scan_path_recursive`function returns index of the constructed node(with metadata provided).
     // - If path is not under the watch root, None is returned.
     // - Procedure contains metadata fetching, if metadata fetching failed, None is returned.
-    pub fn scan_path_recursive(&mut self, raw_path: &Path) -> Option<usize> {
+    pub fn scan_path_recursive(&mut self, raw_path: &Path) -> Option<SlabIndex> {
         // Ensure path is under the watch root
         let Ok(path) = raw_path.strip_prefix(&self.path) else {
             return None;
@@ -436,7 +424,7 @@ impl SearchCache {
     // - If path is not under the watch root, None is returned.
     // - Procedure contains metadata fetching, if metadata fetching failed, None is returned.
     #[allow(dead_code)]
-    fn scan_path_nonrecursive(&mut self, raw_path: &Path) -> Option<usize> {
+    fn scan_path_nonrecursive(&mut self, raw_path: &Path) -> Option<SlabIndex> {
         // Ensure path is under the watch root
         let Ok(path) = raw_path.strip_prefix(&self.path) else {
             return None;
@@ -450,7 +438,7 @@ impl SearchCache {
 
     pub fn rescan(&mut self) {
         // Remove all memory consuming cache early for memory consumption in Self::walk_fs.
-        self.slab = Slab::new();
+        self.slab = ThinSlab::new();
         self.name_index = BTreeMap::default();
         self.name_pool = NamePool::new();
         let path = std::mem::take(&mut self.path);
@@ -458,8 +446,8 @@ impl SearchCache {
     }
 
     /// Removes a node and its children recursively by index.
-    fn remove_node(&mut self, index: usize) {
-        fn remove_single_node(cache: &mut SearchCache, index: usize) {
+    fn remove_node(&mut self, index: SlabIndex) {
+        fn remove_single_node(cache: &mut SearchCache, index: SlabIndex) {
             if let Some(node) = cache.slab.try_remove(index) {
                 let indexes = cache
                     .name_index
@@ -530,13 +518,13 @@ impl SearchCache {
 
     /// Returns a node info vector with the same length as the input nodes.
     /// If the given node is not found, an empty SearchResultNode is returned.
-    pub fn expand_file_nodes(&mut self, nodes: Vec<usize>) -> Vec<SearchResultNode> {
+    pub fn expand_file_nodes(&mut self, nodes: Vec<SlabIndex>) -> Vec<SearchResultNode> {
         self.expand_file_nodes_inner::<true>(nodes)
     }
 
     fn expand_file_nodes_inner<const FETCH_META: bool>(
         &mut self,
-        nodes: Vec<usize>,
+        nodes: Vec<SlabIndex>,
     ) -> Vec<SearchResultNode> {
         nodes
             .into_iter()
@@ -662,7 +650,11 @@ pub enum HandleFSEError {
 }
 
 /// Note: This function is expected to be called with WalkData which metadata is not fetched.
-fn construct_node_slab(parent: Option<usize>, node: &Node, slab: &mut Slab<SlabNode>) -> usize {
+fn construct_node_slab(
+    parent: Option<SlabIndex>,
+    node: &Node,
+    slab: &mut ThinSlab<SlabNode>,
+) -> SlabIndex {
     let metadata = match node.metadata {
         Some(metadata) => SlabNodeMetadata::Some(metadata),
         None => SlabNodeMetadata::None,
@@ -684,9 +676,9 @@ impl SearchCache {
     /// ATTENTION1: This function should only called with Node fetched with metadata.
     fn create_node_slab_update_name_index_and_name_pool(
         &mut self,
-        parent: Option<usize>,
+        parent: Option<SlabIndex>,
         node: &Node,
-    ) -> usize {
+    ) -> SlabIndex {
         let metadata = match node.metadata {
             Some(metadata) => SlabNodeMetadata::Some(metadata),
             // This function should only be called with Node fetched with metadata
@@ -703,7 +695,7 @@ impl SearchCache {
     }
 }
 
-fn name_pool(name_index: &BTreeMap<String, Vec<usize>>) -> NamePool {
+fn name_pool(name_index: &BTreeMap<String, Vec<SlabIndex>>) -> NamePool {
     let name_pool_time = Instant::now();
     let mut name_pool = NamePool::new();
     for name in name_index.keys() {

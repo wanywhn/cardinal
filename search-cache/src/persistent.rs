@@ -1,7 +1,6 @@
-use crate::cache::SlabNode;
+use crate::{SlabIndex, ThinSlab, cache::SlabNode};
 use anyhow::{Context, Result};
 use bincode::{Decode, Encode, config::Configuration};
-use slab::Slab;
 use std::{
     collections::BTreeMap,
     fs::{self, File},
@@ -23,9 +22,9 @@ pub struct PersistentStorage {
     /// Root file path of the cache
     pub path: PathBuf,
     /// Root index of the slab
-    pub slab_root: usize,
-    pub slab: Slab<SlabNode>,
-    pub name_index: BTreeMap<String, Vec<usize>>,
+    pub slab_root: SlabIndex,
+    pub slab: ThinSlab<SlabNode>,
+    pub name_index: BTreeMap<String, Vec<SlabIndex>>,
 }
 
 const BINCODE_CONDFIG: Configuration = bincode::config::standard();
