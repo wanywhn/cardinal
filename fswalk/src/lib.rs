@@ -1,6 +1,5 @@
 mod type_and_size;
 
-use type_and_size::{NodeFileType, TypeAndSize};
 use bincode::{Decode, Encode};
 use rayon::{iter::ParallelBridge, prelude::ParallelIterator};
 use serde::{Deserialize, Serialize};
@@ -13,6 +12,7 @@ use std::{
     sync::atomic::{AtomicUsize, Ordering},
     time::UNIX_EPOCH,
 };
+use type_and_size::{NodeFileType, TypeAndSize};
 
 #[derive(Serialize, Encode, Debug)]
 pub struct Node {
@@ -44,12 +44,20 @@ impl NodeMetadata {
             .created()
             .ok()
             .and_then(|x| x.duration_since(UNIX_EPOCH).ok())
-            .and_then(|x| u32::try_from(x.as_secs()).ok().and_then(|x| NonZeroU32::new(x)));
+            .and_then(|x| {
+                u32::try_from(x.as_secs())
+                    .ok()
+                    .and_then(|x| NonZeroU32::new(x))
+            });
         let mtime = metadata
             .modified()
             .ok()
             .and_then(|x| x.duration_since(UNIX_EPOCH).ok())
-            .and_then(|x| u32::try_from(x.as_secs()).ok().and_then(|x| NonZeroU32::new(x)));
+            .and_then(|x| {
+                u32::try_from(x.as_secs())
+                    .ok()
+                    .and_then(|x| NonZeroU32::new(x))
+            });
         Self {
             type_and_size,
             ctime,

@@ -1,8 +1,7 @@
-use std::fs;
 use bincode::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
-
+use std::fs;
 
 #[derive(Debug, Serialize, Deserialize, Encode, Decode, Clone, Copy)]
 #[serde(transparent)]
@@ -22,12 +21,16 @@ impl TypeAndSize {
     }
 
     pub fn size(&self) -> u64 {
-        let value = u64::from_le_bytes([self.0[0], self.0[1], self.0[2], self.0[3], self.0[4], self.0[5], 0, 0]);
+        let value = u64::from_le_bytes([
+            self.0[0], self.0[1], self.0[2], self.0[3], self.0[4], self.0[5], 0, 0,
+        ]);
         value & ((1u64 << 46) - 1)
     }
 }
 
-#[derive(Debug, Serialize_repr, Deserialize_repr, Encode, Decode, Clone, Copy, enumn::N, PartialEq, Eq)]
+#[derive(
+    Debug, Serialize_repr, Deserialize_repr, Encode, Decode, Clone, Copy, enumn::N, PartialEq, Eq,
+)]
 #[repr(u8)]
 pub enum NodeFileType {
     // File occurs a lot, assign it to 0 for better compression ratio(I guess... maybe useful).
@@ -101,4 +104,3 @@ mod tests {
         assert_eq!(ts.size(), max_size);
     }
 }
-
