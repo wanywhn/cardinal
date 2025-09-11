@@ -9,6 +9,7 @@ use fswalk::{Node, NodeMetadata, walk_it};
 use namepool::NamePool;
 use query_segmentation::{Segment, query_segmentation};
 use serde::{Deserialize, Serialize};
+use smallvec::SmallVec;
 use std::{
     collections::BTreeMap,
     ffi::{CString, OsStr},
@@ -22,7 +23,7 @@ use typed_num::Num;
 #[derive(Debug, Serialize, Deserialize)]
 pub struct SlabNode {
     parent: OptionSlabIndex,
-    children: Vec<SlabIndex>,
+    children: SmallVec<SlabIndex, 2>,
     name: String,
     metadata: SlabNodeMetadata,
 }
@@ -41,7 +42,7 @@ impl SlabNode {
     pub fn new(parent: Option<SlabIndex>, name: String, metadata: SlabNodeMetadata) -> Self {
         Self {
             parent: OptionSlabIndex::from_option(parent),
-            children: vec![],
+            children: SmallVec::new(),
             name,
             metadata,
         }

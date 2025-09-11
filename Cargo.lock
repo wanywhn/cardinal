@@ -1406,6 +1406,7 @@ dependencies = [
  "query-segmentation",
  "serde",
  "slab",
+ "smallvec",
  "tempdir",
  "tracing",
  "typed-num",
