@@ -15,7 +15,7 @@ use std::{
 pub struct Node {
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub children: Vec<Node>,
-    pub name: String,
+    pub name: Box<str>,
     pub metadata: Option<NodeMetadata>,
 }
 
@@ -145,7 +145,7 @@ fn walk(path: &Path, walk_data: &WalkData) -> Option<Node> {
                                     let name = entry
                                         .path()
                                         .file_name()
-                                        .map(|x| x.to_string_lossy().into_owned())
+                                        .map(|x| x.to_string_lossy().into_owned().into_boxed_str())
                                         .unwrap_or_default();
                                     return Some(Node {
                                         children: vec![],
@@ -184,7 +184,7 @@ fn walk(path: &Path, walk_data: &WalkData) -> Option<Node> {
     };
     let name = path
         .file_name()
-        .map(|x| x.to_string_lossy().into_owned())
+        .map(|x| x.to_string_lossy().into_owned().into_boxed_str())
         .unwrap_or_default();
     Some(Node {
         children,
@@ -212,7 +212,7 @@ mod tests {
         fs::File::create(root.join("dir_a/file_b.log")).unwrap();
         let walk_data = WalkData::new(PathBuf::from("/ignore/this"), false);
         let node = walk_it(root, &walk_data).unwrap();
-        assert_eq!(node.name, root.file_name().unwrap().to_string_lossy());
+        assert_eq!(&*node.name, root.file_name().unwrap().to_str().unwrap());
         // Root + dir + 2 files
         let mut counts = (0, 0);
         fn traverse(n: &Node, counts: &mut (usize, usize)) {
@@ -256,7 +256,7 @@ mod tests {
         let walk_data = WalkData::new(PathBuf::from("/ignore/this"), true);
         let node = walk_it(root, &walk_data).unwrap();
         fn find<'a>(node: &'a Node, name: &str) -> Option<&'a Node> {
-            if node.name == name {
+            if &*node.name == name {
                 return Some(node);
             }
             for c in &node.children {
@@ -285,7 +285,7 @@ mod tests {
         let node = walk_it(root, &walk_data).unwrap();
         // Ensure link_dir exists as a file system entry but not traversed (should be a file node with no children)
         fn get_child<'a>(n: &'a Node, name: &str) -> Option<&'a Node> {
-            n.children.iter().find(|c| c.name == name)
+            n.children.iter().find(|c| &*c.name == name)
         }
         let link = get_child(&node, "link_dir").unwrap();
         assert!(

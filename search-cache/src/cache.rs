@@ -712,7 +712,7 @@ fn construct_node_slab(
         Some(metadata) => SlabNodeMetadataCompact::some(metadata.into()),
         None => SlabNodeMetadataCompact::none(),
     };
-    let slab_node = SlabNode::new(parent, node.name.clone().into_boxed_str(), metadata);
+    let slab_node = SlabNode::new(parent, node.name.clone(), metadata);
     let index = slab.insert(slab_node);
     slab[index].children = node
         .children
@@ -737,7 +737,7 @@ impl SearchCache {
             // This function should only be called with Node fetched with metadata
             None => SlabNodeMetadataCompact::unaccessible(),
         };
-        let slab_node = SlabNode::new(parent, node.name.clone().into_boxed_str(), metadata);
+        let slab_node = SlabNode::new(parent, node.name.clone(), metadata);
         let index = self.push_node(slab_node);
         self.slab[index].children = node
             .children
