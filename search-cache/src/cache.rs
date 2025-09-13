@@ -11,16 +11,50 @@ use namepool::NamePool;
 use query_segmentation::{Segment, query_segmentation};
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::BTreeMap,
-    ffi::{CString, OsStr},
-    io::ErrorKind,
-    num::NonZeroU32,
-    path::{Path, PathBuf},
-    time::Instant,
+    borrow::Borrow, collections::BTreeMap, ffi::{CString, OsStr}, io::ErrorKind, num::NonZeroU32, path::{Path, PathBuf}, sync::LazyLock, time::Instant
 };
 use thin_vec::ThinVec;
 use tracing::{debug, info};
 use typed_num::Num;
+
+/// In a compact form, since filename length is limited to 255 on macOS, u8 len is enough.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct NamePoolString {
+    offset: u32,
+    len: u8
+}
+
+impl NamePoolString {
+    pub fn as_str<'a>(&self) -> &'a str {
+        NAME_POOL.get(self.offset as usize, self.len as usize)
+    }
+}
+
+impl PartialEq for NamePoolString {
+    fn eq(&self, other: &Self) -> bool {
+        self.len == other.len && self.as_str() == other.as_str()
+    }
+}
+
+impl Eq for NamePoolString {}
+
+impl PartialOrd for NamePoolString {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for NamePoolString {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.as_str().cmp(other.as_str())
+    }
+}
+
+impl Borrow<str> for NamePoolString {
+    fn borrow(&self) -> &str {
+        self.as_str()
+    }
+}
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct SlabNode {
@@ -151,8 +185,8 @@ pub struct SearchCache {
     last_event_id: u64,
     slab_root: SlabIndex,
     slab: ThinSlab<SlabNode>,
-    name_index: BTreeMap<Box<str>, Vec<SlabIndex>>,
-    name_pool: NamePool,
+    name_index: BTreeMap<NamePoolString, Vec<SlabIndex>>,
+    name_pool: &'static NamePool,
 }
 
 impl std::fmt::Debug for SearchCache {
@@ -277,7 +311,27 @@ impl SearchCache {
         name_index: BTreeMap<Box<str>, Vec<SlabIndex>>,
     ) -> Self {
         // name pool construction speed is fast enough that caching it doesn't worth it.
-        let name_pool = name_pool(&name_index);
+        let (name_pool, name_index) = name_pool(name_index);
+        Self {
+            path,
+            last_event_id,
+            slab_root,
+            slab,
+            name_index,
+            name_pool,
+        }
+    }
+
+    pub fn new_name_pool(
+        path: PathBuf,
+        last_event_id: u64,
+        slab_root: SlabIndex,
+        slab: ThinSlab<SlabNode>,
+        name_pool: NamePool,
+        name_index: BTreeMap<Box<str>, Vec<SlabIndex>>,
+    ) -> Self {
+        // name pool construction speed is fast enough that caching it doesn't worth it.
+        let (name_pool, name_index) = name_pool(name_index);
         Self {
             path,
             last_event_id,
@@ -322,24 +376,24 @@ impl SearchCache {
                 node_set = Some(new_node_set);
             } else {
                 let names: Vec<_> = match segment {
-                    Segment::Substr(substr) => self.name_pool.search_substr(substr).collect(),
+                    Segment::Substr(substr) => self.name_pool.search_substr(substr),
                     Segment::Prefix(prefix) => {
                         let mut buffer = Vec::with_capacity(prefix.len() + 1);
                         buffer.push(0);
                         buffer.extend_from_slice(prefix.as_bytes());
-                        self.name_pool.search_prefix(&buffer).collect()
+                        self.name_pool.search_prefix(&buffer)
                     }
                     Segment::Exact(exact) => {
                         let mut buffer = Vec::with_capacity(exact.len() + 2);
                         buffer.push(0);
                         buffer.extend_from_slice(exact.as_bytes());
                         buffer.push(0);
-                        self.name_pool.search_exact(&buffer).collect()
+                        self.name_pool.search_exact(&buffer)
                     }
                     Segment::Suffix(suffix) => {
                         // Query contains nul is very rare
                         let suffix = CString::new(*suffix).expect("Query contains nul");
-                        self.name_pool.search_suffix(&suffix).collect()
+                        self.name_pool.search_suffix(&suffix)
                     }
                 };
                 let mut nodes = Vec::with_capacity(names.len());
@@ -380,12 +434,13 @@ impl SearchCache {
     fn push_node(&mut self, node: SlabNode) -> SlabIndex {
         let node_name = node.name.clone();
         let index = self.slab.insert(node);
-        if let Some(indexes) = self.name_index.get_mut(&node_name) {
+        if let Some(indexes) = self.name_index.get_mut(&*node_name) {
             if !indexes.iter().any(|&x| x == index) {
                 indexes.push(index);
             }
         } else {
-            self.name_pool.push(&node_name);
+            let (offset, len) = self.name_pool.push(&node_name);
+            let node_name = NamePoolString { offset: offset as u32, len: len as u8 };
             self.name_index.insert(node_name, vec![index]);
         }
         index
@@ -497,8 +552,8 @@ impl SearchCache {
     pub fn rescan(&mut self) {
         // Remove all memory consuming cache early for memory consumption in Self::walk_fs.
         self.slab = ThinSlab::new();
+        // TOOD(ldm0): rescan need to be redesigned, the name_pool will be pushed twice. 
         self.name_index = BTreeMap::default();
-        self.name_pool = NamePool::new();
         let path = std::mem::take(&mut self.path);
         *self = Self::walk_fs(path);
     }
@@ -509,11 +564,11 @@ impl SearchCache {
             if let Some(node) = cache.slab.try_remove(index) {
                 let indexes = cache
                     .name_index
-                    .get_mut(&node.name)
+                    .get_mut(&*node.name)
                     .expect("inconsistent name index and node");
                 indexes.retain(|&x| x != index);
                 if indexes.is_empty() {
-                    cache.name_index.remove(&node.name);
+                    cache.name_index.remove(&*node.name);
                     // TODO(ldm0): actually we need to remove name in the name pool,
                     // but currently name pool doesn't support remove. (GC is needed for name pool)
                     // self.name_pool.remove(&node.name);
@@ -748,18 +803,21 @@ impl SearchCache {
     }
 }
 
-fn name_pool(name_index: &BTreeMap<Box<str>, Vec<SlabIndex>>) -> NamePool {
+pub static NAME_POOL: LazyLock<NamePool> = LazyLock::new(|| NamePool::new());
+
+fn name_pool(name_index: BTreeMap<Box<str>, Vec<SlabIndex>>) -> (&'static NamePool, BTreeMap<NamePoolString, Vec<SlabIndex>>) {
+    let mut new_name_index = BTreeMap::new();
     let name_pool_time = Instant::now();
-    let mut name_pool = NamePool::new();
-    for name in name_index.keys() {
-        name_pool.push(name);
+    for (name, indices) in name_index {
+        let (offset, len) = NAME_POOL.push(&name);
+        new_name_index.insert(NamePoolString { offset: offset as u32, len: len as u8 }, indices);
     }
     info!(
         "Name pool construction time: {:?}, size: {}MB",
         name_pool_time.elapsed(),
-        name_pool.len() as f32 / 1024. / 1024.
+        NAME_POOL.len() as f32 / 1024. / 1024.
     );
-    name_pool
+    (&*NAME_POOL, new_name_index)
 }
 
 #[cfg(test)]

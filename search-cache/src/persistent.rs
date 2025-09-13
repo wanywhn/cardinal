@@ -1,5 +1,6 @@
-use crate::{SlabIndex, ThinSlab, cache::SlabNode};
+use crate::{cache::SlabNode, NamePoolString, SlabIndex, ThinSlab};
 use anyhow::{Context, Result};
+use namepool::NamePool;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::BTreeMap,
@@ -12,11 +13,11 @@ use std::{
 use tracing::info;
 use typed_num::Num;
 
-const LSF_VERSION: i64 = 1;
+const CACHE_VERSION: i64 = 2;
 
 #[derive(Serialize, Deserialize)]
 pub struct PersistentStorage {
-    pub version: Num<LSF_VERSION>,
+    pub version: Num<CACHE_VERSION>,
     /// The last event id of the cache.
     pub last_event_id: u64,
     /// Root file path of the cache
@@ -24,7 +25,8 @@ pub struct PersistentStorage {
     /// Root index of the slab
     pub slab_root: SlabIndex,
     pub slab: ThinSlab<SlabNode>,
-    pub name_index: BTreeMap<Box<str>, Vec<SlabIndex>>,
+    pub name_pool: NamePool,
+    pub name_index: BTreeMap<NamePoolString, Vec<SlabIndex>>,
 }
 
 pub fn read_cache_from_file(path: &Path) -> Result<PersistentStorage> {
