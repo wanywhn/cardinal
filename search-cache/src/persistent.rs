@@ -9,6 +9,7 @@ use std::{
     thread::available_parallelism,
     time::Instant,
 };
+use hashbrown::HashSet;
 use tracing::info;
 use typed_num::Num;
 
@@ -24,7 +25,9 @@ pub struct PersistentStorage {
     /// Root index of the slab
     pub slab_root: SlabIndex,
     pub slab: ThinSlab<SlabNode>,
-    pub name_index: BTreeMap<Box<str>, Vec<SlabIndex>>,
+    // TODO(ldm0): consider using a more compact structure to replace the hashset, mostly hashset only contains one element
+    // for each name, we can use a vec and dedup it when querying
+    pub name_index: BTreeMap<Box<str>, HashSet<SlabIndex>>,
 }
 
 pub fn read_cache_from_file(path: &Path) -> Result<PersistentStorage> {

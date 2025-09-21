@@ -179,8 +179,8 @@ pub fn run() -> Result<()> {
     // Create communication channels
     let (finish_tx, finish_rx) = bounded::<Sender<Option<SearchCache>>>(1);
     let (search_tx, search_rx) = unbounded::<String>();
-    let (result_tx, result_rx) = unbounded::<Result<Vec<SlabIndex>>>();
-    let (node_info_tx, node_info_rx) = unbounded::<Vec<SlabIndex>>();
+    let (result_tx, result_rx) = unbounded();
+    let (node_info_tx, node_info_rx) = unbounded();
     let (node_info_results_tx, node_info_results_rx) = unbounded::<Vec<SearchResultNode>>();
 
     // 运行Tauri应用
@@ -317,7 +317,7 @@ pub fn run() -> Result<()> {
                     let result = if query.is_empty() {
                         Ok(cache.search_empty())
                     } else {
-                        cache.search(&query)
+                        cache.search(&query).map(|x| x.into_iter().collect())
                     };
                     result_tx.send(result).expect("Failed to send result");
                 }

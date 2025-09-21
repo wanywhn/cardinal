@@ -22,7 +22,7 @@ mod extra {
         let cache = SearchCache::walk_fs(tmp.path().to_path_buf());
         let idxs = cache.search("file_x").unwrap();
         assert_eq!(idxs.len(), 1);
-        let full = cache.node_path(idxs[0]).unwrap();
+        let full = cache.node_path(idxs.into_iter().next().unwrap()).unwrap();
         assert!(full.ends_with(PathBuf::from("dir1/file_x")));
     }
 
@@ -67,14 +67,14 @@ mod extra {
         assert_eq!(q1.len(), 1);
         assert!(q1[0].metadata.is_none());
         // expand_file_nodes should fetch metadata
-        let nodes = cache.expand_file_nodes(idxs.clone());
+        let nodes = cache.expand_file_nodes(idxs.iter().copied().collect());
         assert_eq!(nodes.len(), 1);
         assert!(
             nodes[0].metadata.is_some(),
             "metadata should be fetched on demand"
         );
         // A second expand should still have metadata (cached)
-        let nodes2 = cache.expand_file_nodes(idxs);
+        let nodes2 = cache.expand_file_nodes(idxs.iter().copied().collect());
         assert!(nodes2[0].metadata.is_some());
     }
 

@@ -31,7 +31,7 @@ impl OptionSlabIndex {
 //
 // slab index starts from 0, therefore we can say if parent is u32::MAX, it means no parent
 // small and dirty size optimization :(
-#[derive(Debug, Copy, Clone, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Copy, Clone, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[repr(transparent)]
 #[serde(transparent)]
 pub struct SlabIndex(u32);

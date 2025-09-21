@@ -7,6 +7,7 @@ use anyhow::{Context, Result, anyhow, bail};
 use cardinal_sdk::{EventFlag, FsEvent, ScanType, current_event_id};
 pub use fswalk::WalkData;
 use fswalk::{Node, NodeFileType, NodeMetadata, walk_it};
+use hashbrown::HashSet;
 use namepool::NamePool;
 use query_segmentation::{Segment, query_segmentation};
 use serde::{Deserialize, Serialize};
@@ -159,7 +160,7 @@ pub struct SearchCache {
     last_event_id: u64,
     slab_root: SlabIndex,
     slab: ThinSlab<SlabNode>,
-    name_index: BTreeMap<Box<str>, Vec<SlabIndex>>,
+    name_index: BTreeMap<Box<str>, HashSet<SlabIndex>>,
     name_pool: NamePool,
     ignore_path: Option<&'static Path>,
     cancel: Option<&'static AtomicBool>,
@@ -274,23 +275,22 @@ impl SearchCache {
 
             Some((slab_root, slab))
         }
-        fn name_index(slab: &ThinSlab<SlabNode>) -> BTreeMap<Box<str>, Vec<SlabIndex>> {
+        fn name_index(slab: &ThinSlab<SlabNode>) -> BTreeMap<Box<str>, HashSet<SlabIndex>> {
             // TODO(ldm0): Memory optimization can be done by letting name index reference the name in the pool(gc need to be considered though)
             fn construct_name_index(
                 slab: &ThinSlab<SlabNode>,
-                name_index: &mut BTreeMap<Box<str>, Vec<SlabIndex>>,
+                name_index: &mut BTreeMap<Box<str>, HashSet<SlabIndex>>,
             ) {
                 // The slab is newly constructed, thus though slab.iter() iterates all slots, it won't waste too much.
-                for (i, node) in slab.iter() {
+                slab.iter().for_each(|(i, node)| {
                     if let Some(nodes) = name_index.get_mut(&node.name) {
-                        // 因为 slab 是新构建的，所以预期不会有重复，我们直接 push
-                        // if !nodes.iter().any(|&x| x == i) {
-                        nodes.push(i);
-                        // }
+                        nodes.insert(i);
                     } else {
-                        name_index.insert(node.name.clone(), vec![i]);
+                        let mut nodes = HashSet::with_capacity(1);
+                        nodes.insert(i);
+                        name_index.insert(node.name.clone(), nodes);
                     };
-                }
+                });
             }
 
             let name_index_time = Instant::now();
@@ -324,7 +324,7 @@ impl SearchCache {
         last_event_id: u64,
         slab_root: SlabIndex,
         slab: ThinSlab<SlabNode>,
-        name_index: BTreeMap<Box<str>, Vec<SlabIndex>>,
+        name_index: BTreeMap<Box<str>, HashSet<SlabIndex>>,
         ignore_path: Option<&'static Path>,
         cancel: Option<&'static AtomicBool>,
     ) -> Self {
@@ -343,33 +343,29 @@ impl SearchCache {
     }
 
     pub fn search_empty(&self) -> Vec<SlabIndex> {
-        self.name_index
-            .values()
-            .flatten()
-            .copied()
-            .collect::<Vec<_>>()
+        self.name_index.values().flatten().copied().collect()
     }
 
-    pub fn search(&self, line: &str) -> Result<Vec<SlabIndex>> {
+    pub fn search(&self, line: &str) -> Result<HashSet<SlabIndex>> {
         let segments = query_segmentation(line);
         if segments.is_empty() {
             bail!("Unprocessable query: {:?}", line);
         }
         let search_time = Instant::now();
-        let mut node_set: Option<Vec<SlabIndex>> = None;
+        let mut node_set: Option<HashSet<SlabIndex>> = None;
         for segment in &segments {
             if let Some(nodes) = &node_set {
-                let mut new_node_set = Vec::with_capacity(nodes.len());
+                let mut new_node_set = HashSet::with_capacity(nodes.len());
                 for &node in nodes {
                     let childs = &self.slab[node].children;
-                    for child in childs {
+                    for &child in childs {
                         if match segment {
-                            Segment::Substr(substr) => self.slab[*child].name.contains(*substr),
-                            Segment::Prefix(prefix) => self.slab[*child].name.starts_with(*prefix),
-                            Segment::Exact(exact) => &*self.slab[*child].name == *exact,
-                            Segment::Suffix(suffix) => self.slab[*child].name.ends_with(*suffix),
+                            Segment::Substr(substr) => self.slab[child].name.contains(*substr),
+                            Segment::Prefix(prefix) => self.slab[child].name.starts_with(*prefix),
+                            Segment::Exact(exact) => &*self.slab[child].name == *exact,
+                            Segment::Suffix(suffix) => self.slab[child].name.ends_with(*suffix),
                         } {
-                            new_node_set.push(*child);
+                            new_node_set.insert(child);
                         }
                     }
                 }
@@ -396,16 +392,13 @@ impl SearchCache {
                         self.name_pool.search_suffix(&suffix).collect()
                     }
                 };
-                let mut nodes = Vec::with_capacity(names.len());
-                for name in names {
+                let mut nodes = HashSet::with_capacity(names.len());
+                names.into_iter().for_each(|name| {
                     // namepool doesn't shrink, so it can contains non-existng names. Therefore, we don't error out on None branch here.
                     if let Some(x) = self.name_index.get(name) {
-                        nodes.extend_from_slice(x);
+                        nodes.extend(x.iter().copied());
                     }
-                }
-                // name_pool doesn't dedup, so we need to dedup the results here.
-                nodes.sort_unstable();
-                nodes.dedup();
+                });
                 node_set = Some(nodes);
             }
         }
@@ -435,12 +428,12 @@ impl SearchCache {
         let node_name = node.name.clone();
         let index = self.slab.insert(node);
         if let Some(indexes) = self.name_index.get_mut(&node_name) {
-            if !indexes.iter().any(|&x| x == index) {
-                indexes.push(index);
-            }
+            indexes.insert(index);
         } else {
+            let mut indices = HashSet::with_capacity(1);
+            indices.insert(index);
             self.name_pool.push(&node_name);
-            self.name_index.insert(node_name, vec![index]);
+            self.name_index.insert(node_name, indices);
         }
         index
     }
@@ -570,7 +563,7 @@ impl SearchCache {
                     .name_index
                     .get_mut(&node.name)
                     .expect("inconsistent name index and node");
-                indexes.retain(|&x| x != index);
+                indexes.remove(&index);
                 if indexes.is_empty() {
                     cache.name_index.remove(&node.name);
                     // TODO(ldm0): actually we need to remove name in the name pool,
@@ -643,7 +636,7 @@ impl SearchCache {
 
     fn expand_file_nodes_inner<const FETCH_META: bool>(
         &mut self,
-        nodes: Vec<SlabIndex>,
+        nodes: impl IntoIterator<Item = SlabIndex>,
     ) -> Vec<SearchResultNode> {
         nodes
             .into_iter()
@@ -809,7 +802,7 @@ impl SearchCache {
     }
 }
 
-fn name_pool(name_index: &BTreeMap<Box<str>, Vec<SlabIndex>>) -> NamePool {
+fn name_pool(name_index: &BTreeMap<Box<str>, HashSet<SlabIndex>>) -> NamePool {
     let name_pool_time = Instant::now();
     let mut name_pool = NamePool::new();
     for name in name_index.keys() {
@@ -959,6 +952,36 @@ mod tests {
         assert_eq!(cache.slab.len(), 1);
         assert_eq!(cache.name_index.len(), 1);
         assert_eq!(cache.search("new_file.txt").unwrap().len(), 0);
+    }
+
+    #[test]
+    #[ignore]
+    fn test_handle_fs_event_simulator() {
+        let instant = std::time::Instant::now();
+        let mut cache = SearchCache::walk_fs(PathBuf::from("/Library/Developer/CoreSimulator"));
+        let mut event_id = cache.last_event_id + 1;
+        println!(
+            "Cache size: {}, process time: {:?}",
+            cache.slab.len(),
+            instant.elapsed()
+        );
+        // test speed of handling fs event
+        loop {
+            let instant = std::time::Instant::now();
+            let mock_events = vec![FsEvent {
+                path: PathBuf::from("/Library/Developer/CoreSimulator/Volumes/iOS_23A343"),
+                id: event_id,
+                flag: EventFlag::ItemCreated,
+            }];
+
+            cache.handle_fs_events(mock_events).unwrap();
+            event_id += 1;
+            println!(
+                "Event id: {}, process time: {:?}",
+                cache.last_event_id,
+                instant.elapsed()
+            );
+        }
     }
 
     #[test]
@@ -1210,7 +1233,7 @@ mod tests {
             .search("file1.txt")
             .expect("Search for file1.txt failed");
         assert_eq!(file_nodes.len(), 1, "Expected 1 node for file1.txt");
-        let file_node_idx = file_nodes[0];
+        let file_node_idx = file_nodes.into_iter().next().unwrap();
         // 文件的 metadata 都会是 None
         assert!(
             cache.slab[file_node_idx].metadata.is_none(),
@@ -1222,7 +1245,7 @@ mod tests {
             .search("file2.txt")
             .expect("Search for file1.txt failed");
         assert_eq!(file_nodes.len(), 1);
-        let file_node_idx = file_nodes[0];
+        let file_node_idx = file_nodes.into_iter().next().unwrap();
         // 文件的 metadata 都会是 None
         assert!(
             cache.slab[file_node_idx].metadata.is_none(),
@@ -1232,7 +1255,7 @@ mod tests {
         // Check metadata for a subdirectory node
         let dir_nodes = cache.search("subdir1").expect("Search for subdir1 failed");
         assert_eq!(dir_nodes.len(), 1, "Expected 1 node for subdir1");
-        let dir_node_idx = dir_nodes[0];
+        let dir_node_idx = dir_nodes.into_iter().next().unwrap();
         // 目录的 metadata 都会是 Some()
         assert!(
             cache.slab[dir_node_idx].metadata.is_some(),
@@ -1273,7 +1296,7 @@ mod tests {
             1,
             "Expected 1 node for event_file.txt after event"
         );
-        let file_node_idx = file_nodes[0];
+        let file_node_idx = file_nodes.into_iter().next().unwrap();
         let file_slab_meta = cache.slab[file_node_idx]
             .metadata
             .as_ref()
@@ -1314,7 +1337,7 @@ mod tests {
             1,
             "Expected 1 node for event_subdir after event"
         );
-        let dir_node_idx = dir_nodes[0];
+        let dir_node_idx = dir_nodes.into_iter().next().unwrap();
         let dir_slab_meta = cache.slab[dir_node_idx]
             .metadata
             .as_ref()
@@ -1333,7 +1356,7 @@ mod tests {
             1,
             "Expected 1 node for file_in_event_subdir.txt after event"
         );
-        let file_in_subdir_node_idx = file_in_subdir_nodes[0];
+        let file_in_subdir_node_idx = file_in_subdir_nodes.into_iter().next().unwrap();
         let file_in_subdir_slab_meta = cache.slab[file_in_subdir_node_idx]
             .metadata
             .as_ref()
