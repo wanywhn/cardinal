@@ -9,6 +9,8 @@ use thin_vec::ThinVec;
 #[derive(Debug, Clone, Copy)]
 pub struct NameAndParent {
     ptr: *const u8,
+    // Length of the filename should not be larger than 256 bytes(macOS, Linux,
+    // Window, BSD) should be enough
     len: u8,
     parent: crate::OptionSlabIndex,
 }
