@@ -46,7 +46,6 @@ function reducer(state, action) {
       return {
         ...state,
         showLoadingUI: true,
-        results: [],
       };
     case 'SEARCH_SUCCESS':
       return {
@@ -285,8 +284,9 @@ function App() {
   );
 
   const getDisplayState = () => {
-    if (showLoadingUI || !initialFetchCompleted) return 'loading';
+    if (!initialFetchCompleted) return 'loading';
     if (searchError) return 'error';
+    if (showLoadingUI && results.length === 0) return 'loading';
     if (results.length === 0) return 'empty';
     return 'results';
   };
