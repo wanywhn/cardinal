@@ -4,7 +4,7 @@ use crate::{
 };
 use anyhow::{Context, Result, anyhow, bail};
 use cardinal_sdk::{EventFlag, FsEvent, ScanType, current_event_id};
-pub use fswalk::WalkData;
+use fswalk::WalkData;
 use fswalk::{Node, NodeMetadata, walk_it};
 use hashbrown::HashSet;
 use namepool::NamePool;
