@@ -1,30 +1,227 @@
-import { useRef, useCallback, useEffect } from 'react';
+import { useRef, useCallback, useEffect, useReducer } from 'react';
 import './App.css';
 import { ContextMenu } from './components/ContextMenu';
 import { ColumnHeader } from './components/ColumnHeader';
 import { FileRow } from './components/FileRow';
 import StatusBar from './components/StatusBar';
-import { useAppState, useSearch } from './hooks';
 import { useColumnResize } from './hooks/useColumnResize';
 import { useContextMenu } from './hooks/useContextMenu';
-import { ROW_HEIGHT, OVERSCAN_ROW_COUNT } from './constants';
+import { ROW_HEIGHT, OVERSCAN_ROW_COUNT, SEARCH_DEBOUNCE_MS } from './constants';
 import { VirtualList } from './components/VirtualList';
 import { StateDisplay } from './components/StateDisplay';
 import { usePreventRefresh } from './hooks/usePreventRefresh';
+import { invoke } from '@tauri-apps/api/core';
+import { listen, once } from '@tauri-apps/api/event';
+
+const initialState = {
+  results: [],
+  isInitialized: false,
+  scannedFiles: 0,
+  processedEvents: 0,
+  currentQuery: '',
+  showLoadingUI: false,
+  initialFetchCompleted: false,
+  durationMs: null,
+  resultCount: 0,
+  searchError: null,
+};
+
+function reducer(state, action) {
+  switch (action.type) {
+    case 'STATUS_UPDATE':
+      return {
+        ...state,
+        scannedFiles: action.payload.scannedFiles,
+        processedEvents: action.payload.processedEvents,
+      };
+    case 'INIT_COMPLETED':
+      return { ...state, isInitialized: true };
+    case 'SEARCH_REQUEST':
+      return {
+        ...state,
+        searchError: null,
+        showLoadingUI: action.payload.immediate ? true : state.showLoadingUI,
+      };
+    case 'SEARCH_LOADING_DELAY':
+      return {
+        ...state,
+        showLoadingUI: true,
+        results: [],
+      };
+    case 'SEARCH_SUCCESS':
+      return {
+        ...state,
+        results: action.payload.results,
+        currentQuery: action.payload.query,
+        showLoadingUI: false,
+        initialFetchCompleted: true,
+        durationMs: action.payload.duration,
+        resultCount: action.payload.count,
+        searchError: null,
+      };
+    case 'SEARCH_FAILURE':
+      return {
+        ...state,
+        showLoadingUI: false,
+        searchError: action.payload.error,
+        initialFetchCompleted: true,
+        durationMs: action.payload.duration,
+        resultCount: 0,
+      };
+    default:
+      return state;
+  }
+}
 
 function App() {
   usePreventRefresh();
-  const { results, setResults, isInitialized, scannedFiles, processedEvents } = useAppState();
+  const [state, dispatch] = useReducer(reducer, initialState);
+  const {
+    results,
+    isInitialized,
+    scannedFiles,
+    processedEvents,
+    currentQuery,
+    showLoadingUI,
+    initialFetchCompleted,
+    durationMs,
+    resultCount,
+    searchError
+  } = state;
   const { colWidths, onResizeStart, autoFitColumns } = useColumnResize();
   const {
     menu, showContextMenu, showHeaderContextMenu, closeMenu, getMenuItems
   } = useContextMenu(autoFitColumns);
-  const { onQueryChange, currentQuery, showLoadingUI, initialFetchCompleted, durationMs, resultCount, searchError } = useSearch(setResults);
 
   const headerRef = useRef(null);
   const virtualListRef = useRef(null);
   const prevQueryRef = useRef('');
   const prevResultsLenRef = useRef(0);
+  const debounceTimerRef = useRef(null);
+  const loadingDelayTimerRef = useRef(null);
+  const hasInitialSearchRunRef = useRef(false);
+
+  useEffect(() => {
+    let isMounted = true;
+    let unlistenStatus;
+    let unlistenInit;
+
+    const setupListeners = async () => {
+      unlistenStatus = await listen('status_bar_update', (event) => {
+        if (!isMounted) return;
+        const { scanned_files, processed_events } = event.payload;
+        dispatch({
+          type: 'STATUS_UPDATE',
+          payload: {
+            scannedFiles: scanned_files,
+            processedEvents: processed_events
+          }
+        });
+      });
+
+      unlistenInit = await once('init_completed', () => {
+        if (!isMounted) return;
+        dispatch({ type: 'INIT_COMPLETED' });
+      });
+    };
+
+    setupListeners();
+
+    return () => {
+      isMounted = false;
+      if (typeof unlistenStatus === 'function') {
+        unlistenStatus();
+      }
+      if (typeof unlistenInit === 'function') {
+        unlistenInit();
+      }
+    };
+  }, []);
+
+  const handleSearch = useCallback(async (query) => {
+    const startTs = performance.now();
+    const isInitial = !hasInitialSearchRunRef.current;
+    const trimmedQuery = query.trim();
+
+    dispatch({ type: 'SEARCH_REQUEST', payload: { immediate: isInitial } });
+
+    if (!isInitial) {
+      if (loadingDelayTimerRef.current) {
+        clearTimeout(loadingDelayTimerRef.current);
+      }
+      loadingDelayTimerRef.current = setTimeout(() => {
+        dispatch({ type: 'SEARCH_LOADING_DELAY' });
+        loadingDelayTimerRef.current = null;
+      }, 150);
+    }
+
+    try {
+      const searchResults = await invoke('search', { query });
+
+      if (loadingDelayTimerRef.current) {
+        clearTimeout(loadingDelayTimerRef.current);
+        loadingDelayTimerRef.current = null;
+      }
+
+      const endTs = performance.now();
+      const duration = endTs - startTs;
+
+      dispatch({
+        type: 'SEARCH_SUCCESS',
+        payload: {
+          results: searchResults,
+          query: trimmedQuery,
+          duration,
+          count: Array.isArray(searchResults) ? searchResults.length : 0
+        }
+      });
+    } catch (error) {
+      console.error('Search failed:', error);
+
+      if (loadingDelayTimerRef.current) {
+        clearTimeout(loadingDelayTimerRef.current);
+        loadingDelayTimerRef.current = null;
+      }
+
+      const endTs = performance.now();
+      const duration = endTs - startTs;
+
+      dispatch({
+        type: 'SEARCH_FAILURE',
+        payload: {
+          error: error || 'An unknown error occurred.',
+          duration
+        }
+      });
+    } finally {
+      hasInitialSearchRunRef.current = true;
+    }
+  }, []);
+
+  const onQueryChange = useCallback((e) => {
+    const inputValue = e.target.value;
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
+    debounceTimerRef.current = setTimeout(() => {
+      handleSearch(inputValue);
+    }, SEARCH_DEBOUNCE_MS);
+  }, [handleSearch]);
+
+  useEffect(() => () => {
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
+    if (loadingDelayTimerRef.current) {
+      clearTimeout(loadingDelayTimerRef.current);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!hasInitialSearchRunRef.current) {
+      handleSearch('');
+    }
+  }, [handleSearch]);
 
   // 优化的搜索结果处理逻辑（保持使用 useRef，但简化其他逻辑）
   useEffect(() => {
