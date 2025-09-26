@@ -280,6 +280,7 @@ function App() {
       style={{ ...rowStyle, width: 'var(--columns-total)' }}
       onContextMenu={showContextMenu}
       searchQuery={currentQuery}
+      caseInsensitive={caseInsensitive}
     />
   );
 

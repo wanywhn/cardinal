@@ -1,8 +1,20 @@
-import React from 'react';
-import { MiddleEllipsisHighlight, splitTextWithHighlight } from './MiddleEllipsisHighlight';
+import React, { useMemo } from 'react';
+import { MiddleEllipsisHighlight } from './MiddleEllipsisHighlight';
 import { formatKB } from '../utils/format';
 
-export function FileRow({ item, rowIndex, style, onContextMenu, searchQuery }) {
+const SEGMENT_SEPARATOR = /[\\/]+/;
+
+function deriveHighlightTerm(query) {
+  if (!query) return '';
+  const segments = query.split(SEGMENT_SEPARATOR).filter(Boolean);
+  if (segments.length === 0) {
+    return query.trim();
+  }
+  return segments[segments.length - 1].trim();
+}
+
+export function FileRow({ item, rowIndex, style, onContextMenu, searchQuery, caseInsensitive }) {
+  const highlightTerm = useMemo(() => deriveHighlightTerm(searchQuery), [searchQuery]);
   if (!item) {
     // 显示加载状态而不是空白
     return null
@@ -45,13 +57,16 @@ export function FileRow({ item, rowIndex, style, onContextMenu, searchQuery }) {
     >
       <div className="filename-column">
         {item.icon && <img src={item.icon} alt="icon" className="file-icon" />}
-        <MiddleEllipsisHighlight className="filename-text" text={filename} searchQuery={searchQuery} />
+        <MiddleEllipsisHighlight
+          className="filename-text"
+          text={filename}
+          highlightTerm={highlightTerm}
+          caseInsensitive={caseInsensitive}
+        />
       </div>
       {/* Path 列显示目录路径（不包含文件名） */}
       <span className="path-text" title={directoryPath}>
-        {splitTextWithHighlight(directoryPath || '', searchQuery).map((part, i) => (
-          part.isHighlight ? <strong key={i}>{part.text}</strong> : <span key={i}>{part.text}</span>
-        ))}
+        {directoryPath}
       </span>
       <span className={`size-text ${!sizeText ? 'muted' : ''}`}>{sizeText || '—'}</span>
       <span className={`mtime-text ${!mtimeText ? 'muted' : ''}`}>{mtimeText || '—'}</span>

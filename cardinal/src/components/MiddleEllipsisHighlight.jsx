@@ -2,29 +2,32 @@ import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 
 const CHAR_WIDTH = 8; // approximate character width in pixels
 
-export function splitTextWithHighlight(text, searchQuery) {
-  if (!searchQuery) return [{ text, isHighlight: false }];
-  
+export function splitTextWithHighlight(text, searchTerm, options = {}) {
+  const { caseInsensitive = false } = options;
+  if (!searchTerm) return [{ text, isHighlight: false }];
+
+  const haystack = caseInsensitive ? text.toLocaleLowerCase() : text;
+  const needle = caseInsensitive ? searchTerm.toLocaleLowerCase() : searchTerm;
+  if (!needle.length) return [{ text, isHighlight: false }];
+
   const parts = [];
-  let start = 0;
-  let index;
-  
-  while ((index = text.indexOf(searchQuery, start)) !== -1) {
-    // 添加匹配前的文本
-    if (index > start) {
-      parts.push({ text: text.slice(start, index), isHighlight: false });
+  let startIndex = 0;
+  let matchIndex;
+
+  while ((matchIndex = haystack.indexOf(needle, startIndex)) !== -1) {
+    if (matchIndex > startIndex) {
+      parts.push({ text: text.slice(startIndex, matchIndex), isHighlight: false });
     }
-    
-    // 添加匹配的文本
-    parts.push({ text: searchQuery, isHighlight: true });
-    start = index + searchQuery.length;
+
+    const matchEnd = matchIndex + needle.length;
+    parts.push({ text: text.slice(matchIndex, matchEnd), isHighlight: true });
+    startIndex = matchEnd;
   }
-  
-  // 添加剩余文本
-  if (start < text.length) {
-    parts.push({ text: text.slice(start), isHighlight: false });
+
+  if (startIndex < text.length) {
+    parts.push({ text: text.slice(startIndex), isHighlight: false });
   }
-  
+
   return parts;
 }
 
@@ -83,14 +86,14 @@ function applyMiddleEllipsis(parts, maxChars) {
   return [...leftParts, { text: '…', isHighlight: false }, ...rightParts];
 }
 
-export function MiddleEllipsisHighlight({ text, className, searchQuery }) {
+export function MiddleEllipsisHighlight({ text, className, highlightTerm, caseInsensitive }) {
   const containerRef = useRef(null);
   const [containerWidth, setContainerWidth] = useState(0);
 
   // 计算高亮部分（只在 text 或 searchQuery 变化时重新计算）
   const highlightedParts = useMemo(() => {
-    return text ? splitTextWithHighlight(text, searchQuery) : [];
-  }, [text, searchQuery]);
+    return text ? splitTextWithHighlight(text, highlightTerm, { caseInsensitive }) : [];
+  }, [text, highlightTerm, caseInsensitive]);
 
   // 计算显示部分（只在 highlightedParts 或 containerWidth 变化时重新计算）
   const displayParts = useMemo(() => {
