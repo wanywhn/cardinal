@@ -1,311 +1,52 @@
-# Cardinal
+# PENDING
+- fs-icon 仍差强人意，目前显示的和 finder 仍然不一致，怀疑Finder用的别的预览 API(QLThumbnailGenerator?)
+    + 改成 QLThumbnailGenerator + NSWorkspace 之后仍然和Finder实现不一样，尽力了尽力了
+- 需要在内容没有返回时阻塞滚动条
+    - 标准的 scroll bar 没有实现这个，只能用假 scroll bar 了 https://github.com/yairEO/fakescroll/blob/master/react.fakescroll.js
+    - AI 写半天写不好，先缓缓
+- 搜索结果path中query部分高亮(优化成Rust实现返回matched part)
+    - 不高优
+- metadata 启动后自动 fetching
+    - 目前 metadata replenish 流程不太明朗，先搁置
+- metadata 索引
+    - ctime, mtime, size
+    - 目前 metadata 启动后自动 fetching 流程不太明朗(需要更细粒度的锁)，先搁置
+- Windows/NTFS 支持
 
-The open-source and cross-platform Everything.
+# TODO
+- 文件空格预览支持
+- 支持普通搜索，正则搜索, glob search
+    - 不同的格式有开关按钮，类似于 vscode 搜索
+    - 在输入不同的内容的时候自动推断是 glob 还是正则还是普通 substr 搜索，然后对应的按钮变成浅色
+        - 用户可以手动勾选对应的模式按钮，变成深色
+- 搜索结果自动更新
+    - FSEvent 更新之后要重新拉取搜索结果
+- 搜索结果排序
++ shareded-slab + parking_lot::Mutex(+1 byte，内存体积友好)
+    + 问题在于并行读写的正确处理，如 parent 消失场景
+        + fsevent 改 slab 结构， metadata fetching 只增添 metadata 不改 slab 结构
++ 加一个页面放 fsevent 列表
+    + 知道文件系统有哪些更新的需求
++ 加一个页面搜索一个文件夹曾经有过哪些文件
+    + 误删除确认需求
+        - 目前 fsevent 处理慢:
+            - 并行化 fsevent 的fs遍历部分，写数据部分抢锁
+            - 只要有足够快速的 fsevent 处理，我们就可以做到搜索曾经曾经存在过的文件
+            - 好像速度也能接受
++ 加一个页面渲染文件体积 treemap, 支持钻取（点击文件夹展开子项）。
+    + 磁盘整理需求
++ 申请 macos 全盘访问权限: https://github.com/ayangweb/tauri-plugin-macos-permissions
++ 内存优化:
+    + 更 Compact 的 SlabNode
+    + APFS 文件名长度最大只有 255 个字节(Linux 文件系统也是)
+        + 改成用 namepool 变成偏移可以 24 byte -> (usize + u16)10 byte
+        + https://superuser.com/questions/1561484/what-is-the-maximum-length-of-a-filename-apfs
+        + NamePool 需要增加全局单例(运行过程中不变，对去重有更高的要求了)，且内部结构需要改造（改造成链表 + 内存块）（类似于 allocator）
++ 考虑类LSM/WAL设计?
++ icon 抓取之后异步 push，有些icon取得挺慢的
++ 重启+reopen window之后会很慢
 
-The event processor is sync and it uses dedicated threads.
-
-Only paths are scanned and stored since fetching metadata is slow.
-
-```
-cbindgen --config cbindgen.toml --crate cardinal --output cardinal.h
-
-cargo run --release --example tree
-```
-
-TODO: 
-
-[] merge should check access(create) time and event time.(however it's difficult on macOS since we have no way to get timestamp of a fsevent, maybe double check if it's present or not on merging?).
-[] only use fsevent for diff trigger rather than diff data provider? (which means ignore it's delete, modify or create, just checking the place.).
-[] use jwalk to maximize walkdir's performance?
-[] use tauri for UI layer
-
-Native GUI，cross platform core.
-Compressed BTree file system data on saved.
-
-// touch tmp.md(uncreated):
-[
-    FsEvent {
-        path: "/Users/bytedance/code/cardinal/tmp.md",
-        flag: kFSEventStreamEventFlagItemCreated | kFSEventStreamEventFlagItemIsFile,
-        id: 281055642,
-    },
-]
-
-// touch README.md(created)
-[
-    FsEvent {
-        path: "/Users/bytedance/code/cardinal/README.md",
-        flag: kFSEventStreamEventFlagItemInodeMetaMod | kFSEventStreamEventFlagItemIsFile,
-        id: 313783990,
-    },
-]
-
-// rm tmp.md
-[
-    FsEvent {
-        path: "/Users/bytedance/code/cardinal/tmp.md",
-        flag: kFSEventStreamEventFlagItemRemoved | kFSEventStreamEventFlagItemIsFile,
-        id: 281056153,
-    },
-]
-
-// mv tmp.md emm.md
-[
-    FsEvent {
-        path: "/Users/bytedance/code/cardinal/tmp.md",
-        flag: kFSEventStreamEventFlagItemRenamed | kFSEventStreamEventFlagItemIsFile,
-        id: 281060640,
-    },
-    FsEvent {
-        path: "/Users/bytedance/code/cardinal/emm.md",
-        flag: kFSEventStreamEventFlagItemRenamed | kFSEventStreamEventFlagItemIsFile,
-        id: 281060641,
-    },
-]
-
-// chmod +x emm.md
-[
-    FsEvent {
-        path: "/Users/bytedance/code/cardinal/emm.md",
-        flag: kFSEventStreamEventFlagItemChangeOwner | kFSEventStreamEventFlagItemIsFile,
-        id: 281063105,
-    },
-]
-
-// Change README.md and save
-[
-    FsEvent {
-        path: "/Users/bytedance/code/cardinal/README.md",
-        flag: kFSEventStreamEventFlagItemInodeMetaMod | kFSEventStreamEventFlagItemModified | kFSEventStreamEventFlagItemIsFile,
-        id: 286980245,
-    },
-]
-
-// ln -s README.md readme
-[
-    FsEvent {
-        path: "/Users/bytedance/code/cardinal/readme",
-        flag: kFSEventStreamEventFlagItemCreated | kFSEventStreamEventFlagItemIsSymlink,
-        id: 286990858,
-    },
-]
-
-// rm readme (symlink)
-[
-    FsEvent {
-        path: "/Users/bytedance/code/cardinal/readme",
-        flag: kFSEventStreamEventFlagItemCreated | kFSEventStreamEventFlagItemRemoved | kFSEventStreamEventFlagItemIsSymlink,
-        id: 286993883,
-    },
-]
-
-// ln README.md readme
-[
-    FsEvent {
-        path: "/Users/bytedance/code/cardinal/readme",
-        flag: kFSEventStreamEventFlagItemCreated | kFSEventStreamEventFlagItemIsFile | kFSEventStreamEventFlagItemIsHardlink,
-        id: 286993132,
-    },
-    FsEvent {
-        path: "/Users/bytedance/code/cardinal",
-        flag: kFSEventStreamEventFlagItemInodeMetaMod | kFSEventStreamEventFlagItemIsDir,
-        id: 286993135,
-    },
-]
-
-// rm readme (hardlink)
-[
-    FsEvent {
-        path: "/Users/bytedance/code/cardinal/readme",
-        flag: kFSEventStreamEventFlagItemRemoved | kFSEventStreamEventFlagItemIsFile | kFSEventStreamEventFlagItemIsHardlink,
-        id: 286993483,
-    },
-]
-
-
-
-
-// touch target
-[
-    FsEvent {
-        path: "/Users/bytedance/code/cardinal/target",
-        flag: kFSEventStreamEventFlagItemInodeMetaMod | kFSEventStreamEventFlagItemIsDir,
-        id: 316120318,
-    },
-]
-
-// mkdir target/tmp
-[
-    FsEvent {
-        path: "/Users/bytedance/code/cardinal/target/tmp",
-        flag: kFSEventStreamEventFlagItemCreated | kFSEventStreamEventFlagItemIsDir,
-        id: 281055860,
-    },
-]
-
-// rm -r target/tmp
-[
-    FsEvent {
-        path: "/Users/bytedance/code/cardinal/target/tmp",
-        flag: kFSEventStreamEventFlagItemRemoved | kFSEventStreamEventFlagItemIsDir,
-        id: 281060345,
-    },
-]
-
-// mv target/tmp target/emm
-[
-    FsEvent {
-        path: "/Users/bytedance/code/cardinal/target/tmp",
-        flag: kFSEventStreamEventFlagItemRenamed | kFSEventStreamEventFlagItemIsDir,
-        id: 281061482,
-    },
-    FsEvent {
-        path: "/Users/bytedance/code/cardinal/target/emm",
-        flag: kFSEventStreamEventFlagItemRenamed | kFSEventStreamEventFlagItemIsDir,
-        id: 281061483,
-    },
-]
-
-// chmod 600 target/emm
-[
-    FsEvent {
-        path: "/Users/bytedance/code/cardinal/target/emm",
-        flag: kFSEventStreamEventFlagItemChangeOwner | kFSEventStreamEventFlagItemIsDir,
-        id: 286155411,
-    },
-]
-
-# Cardinal
-
-High‑performance, cross‑platform local filesystem index & instant search ("an open-source Everything").
-
-## ✨ Overview
-Cardinal maintains a local index of your filesystem (paths first, metadata lazily) and serves ultra‑fast substring/glob/regex style searches (extensible) through a Tauri desktop UI. It aims for:
-* Fast initial scan & incremental live updates (FSEvents on macOS; extensible to other platforms)
-* Low memory representation (compressed / structured trees)
-* Smooth rendering of very large result sets via a custom virtual list
-* Minimal latency interactive search with intelligent loading UI
-
-## 🧱 Architecture
-| Layer | Tech | Responsibility |
-|-------|------|---------------|
-| Core Index / Watch | Rust (multiple crates) | Scan FS, watch events, maintain in‑memory index, provide query APIs |
-| IPC Boundary | Tauri (Rust <-> JS) | `invoke` commands: `search`, `get_nodes_info`, `open_in_finder` |
-| UI | React + Vite | Search box, virtualized results, column resizing, context menus, status bar |
-
-### Data Flow
-1. User types → `useSearch` (debounced) → `invoke('search')` returns a light list (paths / ids).
-2. Virtual list asks `useRowData.getItem(index)` → triggers batched `invoke('get_nodes_info')` for uncached rows.
-3. Status updates stream via `listen('status_bar_update')` (files scanned, events processed).
-4. Column layout driven by CSS variables synced from `useColumnResize`.
-
-## 🖥️ Frontend Structure
-```
-cardinal/src
-    App.jsx               # Composition root
-    hooks/                # State & data hooks (search, row data, resize, context menu)
-    components/           # VirtualList, FileRow, ColumnHeader, StatusBar, etc.
-    constants/            # Layout + tuning constants (row height, overscan ...)
-    utils/format.js       # Byte formatting
-```
-
-### Key Hooks
-* `useSearch` – debounced querying, staged loading indicator (immediate for first search, delayed for subsequent to avoid flicker), duration metrics, error handling.
-* `useRowData` – sparse row detail cache; lazy batch fetch of metadata (mtime, ctime, size) only when needed.
-* `useColumnResize` – (optimized) rAF‑throttled drag resizing + auto fit + adaptive fallback on extreme window shrink.
-* `useContextMenu` – unified context menu state for file rows and header (reset columns, open in Finder).
-
-### Virtual List (`VirtualList.jsx`)
-* Computes visible window + overscan, absolutely positions rows.
-* Custom vertical scrollbar (track + thumb) with drag + page click.
-* Horizontal scroll remains native (overflow-x) enabling smooth column width usage.
-* Exposes imperative API: `scrollToTop`, `scrollToIndex`.
-
-### Rendering & Highlighting
-* `MiddleEllipsisHighlight` splits matched substrings and applies middle truncation while preserving highlight boundaries.
-* Approximate character width heuristic (`CHAR_WIDTH`) – can be upgraded to measurement for perfect fit.
-
-## ⚙️ Performance Techniques
-| Concern | Strategy |
-|---------|----------|
-| Large result sets | Virtualized rendering (only visible + overscan rows) |
-| Scroll perf | rAF‑coalesced resizing (new), minimal state for scroll top & range |
-| Metadata cost | Two‑phase: initial paths → lazy fetch metadata slices |
-| Search latency UX | Delayed loading indicator (150ms) after first search to suppress flicker |
-| Column layout | CSS vars update instead of recalculating grid templates in multiple places |
-| Drag churn | rAF batching of width updates (avoid per‑mousemove re-render) |
-
-## 🔧 Development
-Prerequisites: Rust toolchain, Node.js, (recommended) pnpm or npm, Tauri environment deps (see Tauri docs per OS).
-
-Install & Run (release backend for closer real-world perf):
 ```bash
-npm install
-npm run tauri dev -- --release
+npm run tauri dev -- --release --features dev
+npm run tauri build
 ```
-
-Pure web (no Tauri backend – limited functionality):
-```bash
-npm run dev
-```
-
-Generate C header (if embedding):
-```bash
-cbindgen --config cbindgen.toml --crate cardinal --output cardinal.h
-```
-
-Tree example (debugging index shape):
-```bash
-cargo run --release --example tree
-```
-
-## ✅ Recent Improvements
-* Column resizing rAF batching + adaptive recompute on narrow windows.
-* Clear separation of lazy metadata fetching vs. initial path array.
-* Middle ellipsis with highlight aware splitting.
-
-## 🗺️ Roadmap / Ideas
-Core / Index
-* [ ] Merge logic: reconcile access/create timestamps vs. event times (macOS FSEvents lacks per‑event timestamp granularity → may need presence checks).
-* [ ] Option: treat FSEvents solely as invalidation triggers (re-scan localized path) vs. trusting type flags.
-* [ ] Evaluate `jwalk` / parallel walk to accelerate initial scan.
-* [ ] Metadata indexing expansion (ctime / mtime / size already partly integrated; consider extended attributes, file type icons cache).
-* [ ] Replace bincode with postcard for smaller persistent footprint; explore `IndexSet` / slab structures for name & metadata caches.
-* [ ] Windows (USN Journal) & Linux (inotify / fanotify) backends.
-
-Search / Query
-* [ ] Unified mode detection: substring / glob / regex → auto infer + manual toggles.
-* [ ] Live updating search results as new events arrive (incremental apply instead of full refresh).
-* [ ] Rust-side pre‑highlight (return match spans to reduce JS work).
-* [ ] Abortable in‑flight search with `AbortController` to avoid stale late responses.
-
-UI / UX
-* [ ] Persist column widths (`localStorage` / Tauri store).
-* [ ] Native file icons per row.
-* [ ] Keyboard navigation & accessibility roles (`grid`, `row`, `gridcell`).
-* [ ] Optional exact width measurement for ellipsis (canvas measure / binary search). 
-* [ ] Batch metadata prefetch on range change (instead of per‑miss heuristics) to reduce redundant invokes.
-* [ ] Consider reverting to native vertical scroll w/ custom styling (simplify wheel handling, better touchpad inertia) OR throttle wheel handler with rAF.
-* [ ] Enhanced error panel (copy details, retry button).
-
-Performance / Tuning
-* [ ] Evaluate overscan adaptively (dynamic based on scroll velocity).
-* [ ] Warm cache for top N most frequent directories.
-
-## 🔍 Design Choices
-* Store paths early – defer expensive metadata I/O until user actually views rows.
-* Favor simple data shapes over aggressive premature compression (optimize once profiling identifies hotspots).
-* UI relies on CSS custom properties for single-pass layout recomputation when widths change.
-
-## 🤝 Contributing
-1. Fork & create feature branch.
-2. Keep changes small; add notes if touching core indexing algorithms.
-3. Run dev mode & ensure no console errors.
-4. Open PR with before/after perf notes when relevant.
-
-## 📦 License
-TODO: Add a license (MIT / Apache-2.0 recommended for Rust + Tauri ecosystems).
-
-## 🧪 FSEvents Examples (macOS)
-Collected raw event samples for reference:
-<details><summary>Expand FSEvents Samples</summary>
