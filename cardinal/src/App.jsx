@@ -1,4 +1,4 @@
-import { useRef, useCallback, useEffect, useReducer, useState } from 'react';
+import { useRef, useCallback, useEffect, useReducer } from 'react';
 import './App.css';
 import { ContextMenu } from './components/ContextMenu';
 import { ColumnHeader } from './components/ColumnHeader';
@@ -75,8 +75,6 @@ function reducer(state, action) {
 function App() {
   usePreventRefresh();
   const [state, dispatch] = useReducer(reducer, initialState);
-  const [useRegex, setUseRegex] = useState(false);
-  const [caseSensitive, setCaseSensitive] = useState(false);
   const {
     results,
     isInitialized,
@@ -96,12 +94,18 @@ function App() {
 
   const headerRef = useRef(null);
   const virtualListRef = useRef(null);
-  const prevQueryRef = useRef('');
+  const prevSearchSignatureRef = useRef({ query: '', useRegex: false, caseSensitive: false });
   const prevResultsLenRef = useRef(0);
   const debounceTimerRef = useRef(null);
   const loadingDelayTimerRef = useRef(null);
   const hasInitialSearchRunRef = useRef(false);
-  const latestQueryRef = useRef('');
+  const latestSearchRef = useRef({ query: '', useRegex: false, caseSensitive: false });
+  const [searchParams, updateSearchParams] = useReducer((prev, patch) => {
+    const next = { ...prev, ...patch };
+    latestSearchRef.current = next;
+    return next;
+  }, latestSearchRef.current);
+  const { useRegex, caseSensitive } = searchParams;
 
   useEffect(() => {
     let isMounted = true;
@@ -140,8 +144,11 @@ function App() {
     };
   }, []);
 
-  const handleSearch = useCallback(async (query) => {
-    latestQueryRef.current = query;
+  const handleSearch = useCallback(async (overrides = {}) => {
+    const nextSearch = { ...latestSearchRef.current, ...overrides };
+    latestSearchRef.current = nextSearch;
+
+    const { query, useRegex: nextUseRegex, caseSensitive: nextCaseSensitive } = nextSearch;
     const startTs = performance.now();
     const isInitial = !hasInitialSearchRunRef.current;
     const trimmedQuery = query.trim();
@@ -162,8 +169,8 @@ function App() {
       const searchResults = await invoke('search', {
         query,
         options: {
-          useRegex,
-          caseInsensitive: !caseSensitive,
+          useRegex: nextUseRegex,
+          caseInsensitive: !nextCaseSensitive,
         }
       });
 
@@ -205,26 +212,28 @@ function App() {
     } finally {
       hasInitialSearchRunRef.current = true;
     }
-  }, [caseSensitive, dispatch, useRegex]);
+  }, [dispatch]);
 
   const onQueryChange = useCallback((e) => {
     const inputValue = e.target.value;
-    latestQueryRef.current = inputValue;
+    updateSearchParams({ query: inputValue });
     if (debounceTimerRef.current) {
       clearTimeout(debounceTimerRef.current);
     }
     debounceTimerRef.current = setTimeout(() => {
-      handleSearch(inputValue);
+      handleSearch({ query: inputValue });
     }, SEARCH_DEBOUNCE_MS);
-  }, [handleSearch]);
+  }, [handleSearch, updateSearchParams]);
 
   const onToggleRegex = useCallback((event) => {
-    setUseRegex(event.target.checked);
-  }, []);
+    const nextValue = event.target.checked;
+    updateSearchParams({ useRegex: nextValue });
+  }, [updateSearchParams]);
 
   const onToggleCaseSensitive = useCallback((event) => {
-    setCaseSensitive(event.target.checked);
-  }, []);
+    const nextValue = event.target.checked;
+    updateSearchParams({ caseSensitive: nextValue });
+  }, [updateSearchParams]);
 
   useEffect(() => () => {
     if (debounceTimerRef.current) {
@@ -237,7 +246,7 @@ function App() {
 
   useEffect(() => {
     if (!hasInitialSearchRunRef.current) {
-      handleSearch('');
+      handleSearch({ query: '' });
     }
   }, [handleSearch]);
 
@@ -245,26 +254,33 @@ function App() {
     if (!hasInitialSearchRunRef.current) {
       return;
     }
-    handleSearch(latestQueryRef.current);
+    handleSearch();
   }, [caseSensitive, handleSearch, useRegex]);
 
   // 优化的搜索结果处理逻辑（保持使用 useRef，但简化其他逻辑）
   useEffect(() => {
     if (results.length === 0) return;
-    const isNewQuery = prevQueryRef.current !== currentQuery;
+
+    const prevSignature = prevSearchSignatureRef.current;
+    const currentSignature = { query: currentQuery, useRegex, caseSensitive };
+    const isNewSignature =
+      prevSignature.query !== currentSignature.query ||
+      prevSignature.useRegex !== currentSignature.useRegex ||
+      prevSignature.caseSensitive !== currentSignature.caseSensitive;
     const wasEmpty = prevResultsLenRef.current === 0;
 
-    if (isNewQuery && virtualListRef.current) {
+    if (isNewSignature && virtualListRef.current) {
       virtualListRef.current.scrollToTop();
     }
 
-    if ((isNewQuery || wasEmpty) && virtualListRef.current?.ensureRangeLoaded) {
+    if ((isNewSignature || wasEmpty) && virtualListRef.current?.ensureRangeLoaded) {
       const preloadCount = Math.min(30, results.length);
       virtualListRef.current.ensureRangeLoaded(0, preloadCount - 1);
     }
-    prevQueryRef.current = currentQuery;
+
+    prevSearchSignatureRef.current = currentSignature;
     prevResultsLenRef.current = results.length;
-  }, [results, currentQuery]);
+  }, [results, currentQuery, useRegex, caseSensitive]);
 
   // 滚动同步处理 - 单向同步版本（Grid -> Header）
   const handleHorizontalSync = useCallback((scrollLeft) => {
@@ -286,8 +302,8 @@ function App() {
 
   const getDisplayState = () => {
     if (!initialFetchCompleted) return 'loading';
+    if (showLoadingUI) return 'loading';
     if (searchError) return 'error';
-    if (showLoadingUI && results.length === 0) return 'loading';
     if (results.length === 0) return 'empty';
     return 'results';
   };
