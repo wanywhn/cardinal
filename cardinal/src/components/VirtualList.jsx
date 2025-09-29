@@ -24,7 +24,6 @@ export const VirtualList = forwardRef(function VirtualList({
 }, ref) {
 	// ----- refs -----
 	const containerRef = useRef(null);
-	const lastScrollLeftRef = useRef(0);
 
 	// ----- state -----
 	const [scrollTop, setScrollTop] = useState(0);
@@ -43,14 +42,9 @@ export const VirtualList = forwardRef(function VirtualList({
 
 	// ----- callbacks: pure calculations first -----
 	// 计算可见范围
-	let start = 0;
-	let end = -1;
-	if (rowCount > 0 && viewportHeight > 0) {
-		const startIndex = Math.floor(scrollTop / rowHeight);
-		const endIndex = startIndex + Math.ceil(viewportHeight / rowHeight) - 1;
-		start = Math.max(0, startIndex - overscan);
-		end = Math.min(rowCount - 1, endIndex + overscan);
-	}
+	const hasViewport = rowCount > 0 && viewportHeight > 0;
+	const start = hasViewport ? Math.max(0, Math.floor(scrollTop / rowHeight) - overscan) : 0;
+	const end = hasViewport ? Math.min(rowCount - 1, Math.ceil((scrollTop + viewportHeight) / rowHeight) + overscan - 1) : -1;
 
 	// 更新滚动位置
 	const updateScrollAndRange = useCallback((nextScrollTop) => {
@@ -67,11 +61,7 @@ export const VirtualList = forwardRef(function VirtualList({
 
 	// 水平滚动同步
 	const handleHorizontalScroll = useCallback((e) => {
-		const scrollLeft = e.target.scrollLeft;
-		if (onScrollSync && scrollLeft !== lastScrollLeftRef.current) {
-			lastScrollLeftRef.current = scrollLeft;
-			onScrollSync(scrollLeft);
-		}
+		if (onScrollSync) onScrollSync(e.target.scrollLeft);
 	}, [onScrollSync]);
 
 	// ----- effects -----
@@ -108,22 +98,19 @@ export const VirtualList = forwardRef(function VirtualList({
 
 	// ----- rendered items memo -----
 	// 渲染的项目
-	let renderedItems = null;
-	if (rowCount > 0 && end >= start) {
-		const count = end - start + 1;
-		const offsetTop = start * rowHeight - scrollTop;
-		renderedItems = Array.from({ length: count }, (_, i) => {
+	const renderedItems = hasViewport && end >= start
+		? Array.from({ length: end - start + 1 }, (_, i) => {
 			const rowIndex = start + i;
 			const item = cache.get(rowIndex);
 			return renderRow(rowIndex, item, {
 				position: 'absolute',
-				top: offsetTop + i * rowHeight,
+				top: start * rowHeight - scrollTop + i * rowHeight,
 				height: rowHeight,
 				left: 0,
 				right: 0
 			});
-		});
-	}
+		})
+		: null;
 
 	// ----- render -----
 	return (
