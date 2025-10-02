@@ -167,6 +167,7 @@ pub fn icon_of_path_ql(path: &str) -> Option<Vec<u8>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::time::{Duration, Instant};
 
     #[test]
     fn test_icon_of_path_normal() {
@@ -224,5 +225,58 @@ mod tests {
             }
             std::thread::sleep(std::time::Duration::from_secs(1));
         }
+    }
+
+    #[test]
+    #[ignore = "local speed test"]
+    fn test_icon_generation_for_qq_images() {
+        let dir = "/Users/0ldm/Library/Containers/com.tencent.qq/Data/Library/Application Support/QQ/nt_qq_f0d0b80219b392fd75eeb26a6a67027c/nt_data/Pic/2025-06/Ori/";
+        let entries = std::fs::read_dir(dir).expect("failed to read QQ image directory");
+
+        let mut ns_total: Duration = Duration::default();
+        let mut ql_total: Duration = Duration::default();
+        let mut processed = 0usize;
+
+        for entry in entries {
+            let entry = entry.expect("failed to read entry");
+            let path = entry.path();
+            if !path.is_file() {
+                continue;
+            }
+
+            let path_str = path.to_string_lossy().into_owned();
+
+            let start_ns = Instant::now();
+            let icon_ns = icon_of_path_ns(&path_str).expect("NSWorkspace icon lookup failed");
+            let ns_elapsed = start_ns.elapsed();
+
+            let start_ql = Instant::now();
+            let Some(icon_ql) = icon_of_path_ql(&path_str) else {
+                println!("QuickLook thumbnail generation failed for path {}", path_str);
+                continue;
+            };
+            let ql_elapsed = start_ql.elapsed();
+
+            ns_total += ns_elapsed;
+            ql_total += ql_elapsed;
+
+            println!(
+                "{} -> ns: {:?}, ql: {:?}, ns_bytes: {}, ql_bytes: {}",
+                path.display(),
+                ns_elapsed,
+                ql_elapsed,
+                icon_ns.len(),
+                icon_ql.len()
+            );
+
+            processed += 1;
+        }
+
+        println!(
+            "Processed {} files with total durations ns={:?}, ql={:?}",
+            processed, ns_total, ql_total
+        );
+
+        assert!(processed > 0, "no image files were processed");
     }
 }
