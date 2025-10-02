@@ -252,7 +252,10 @@ mod tests {
 
             let start_ql = Instant::now();
             let Some(icon_ql) = icon_of_path_ql(&path_str) else {
-                println!("QuickLook thumbnail generation failed for path {}", path_str);
+                println!(
+                    "QuickLook thumbnail generation failed for path {}",
+                    path_str
+                );
                 continue;
             };
             let ql_elapsed = start_ql.elapsed();
