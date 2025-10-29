@@ -11,7 +11,5 @@
   当前对每个视窗节点单独 `rayon::spawn`，Viewport 大时会产生大量任务，可换成 `icon_jobs.into_par_iter()` 或固定线程池批量处理，降低调度开销。
 - **FsEvent 扫描路径去重算法优化**  
   `search-cache/src/cache.rs::scan_paths` 在最坏情况下 O(n²)。可按路径深度排序后线性合并，并用栈结构取代频繁的 `retain`。
-- **减少 fswalk 的 PathBuf 分配**  
-  `fswalk/src/lib.rs` 中对文件名使用 `entry.path().file_name()`，每次都构造 `PathBuf`。改成 `entry.file_name()` 可以直接拿到 `OsString`，降低遍历大目录时的堆分配。
 - **NamePool 检索结构升级**  
   `namepool/src/lib.rs` 里的 `BTreeSet` + `Mutex` 每次查询都会全表扫描并复制集合。考虑换成 `RwLock` + `fst`/前缀树，或为常见前缀/后缀维护辅助索引，可显著加速模糊搜索并减少锁竞争。

@@ -167,10 +167,10 @@ fn walk(path: &Path, walk_data: &WalkData) -> Option<Node> {
                                 } else {
                                     walk_data.num_files.fetch_add(1, Ordering::Relaxed);
                                     let name = entry
-                                        .path()
                                         .file_name()
-                                        .map(|x| x.to_string_lossy().into_owned().into_boxed_str())
-                                        .unwrap_or_default();
+                                        .to_string_lossy()
+                                        .into_owned()
+                                        .into_boxed_str();
                                     return Some(Node {
                                         children: vec![],
                                         name,
