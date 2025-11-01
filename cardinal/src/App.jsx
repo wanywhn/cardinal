@@ -6,7 +6,7 @@ import { FileRow } from './components/FileRow';
 import StatusBar from './components/StatusBar';
 import { useColumnResize } from './hooks/useColumnResize';
 import { useContextMenu } from './hooks/useContextMenu';
-import { ROW_HEIGHT, OVERSCAN_ROW_COUNT, SEARCH_DEBOUNCE_MS } from './constants';
+import { ROW_HEIGHT, OVERSCAN_ROW_COUNT, SEARCH_DEBOUNCE_MS, CONTAINER_PADDING } from './constants';
 import { VirtualList } from './components/VirtualList';
 import { StateDisplay } from './components/StateDisplay';
 import FSEventsPanel from './components/FSEventsPanel';
@@ -110,7 +110,7 @@ function App() {
 
   // Calculate event column widths based on ratios
   const calculateEventColWidths = useCallback(() => {
-    const totalWidth = window.innerWidth - 60;
+    const totalWidth = window.innerWidth - CONTAINER_PADDING * 2;
     return {
       time: Math.floor(totalWidth * 0.2),
       name: Math.floor(totalWidth * 0.3),
@@ -581,7 +581,7 @@ function App() {
           ['--w-event-name']: `${eventColWidths.name}px`,
           ['--w-event-path']: `${eventColWidths.path}px`,
           ['--w-event-time']: `${eventColWidths.time}px`,
-          ['--columns-events-total']: `${eventColWidths.name + eventColWidths.path + eventColWidths.time + 2 * 12 + 10}px`,
+          ['--columns-events-total']: `${eventColWidths.name + eventColWidths.path + eventColWidths.time}px`,
         }}
       >
         {activeTab === 'events' ? (

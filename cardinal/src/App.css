@@ -38,7 +38,6 @@
 
   /* Layout tokens */
   --row-height: 24px; /* 与虚拟列表 rowHeight 同步 */
-  --col-gap: 12px; /* 列之间的间隙 */
   --columns-extra: 10px; /* 额外宽度补偿调小避免溢出，应与 JS COLUMNS_EXTRA 保持一致 */
   --col-min-width: 30px; /* 列宽最小值 */
   --col-max-width: 10000px; /* 列宽最大值 */
@@ -270,7 +269,7 @@ button:active {
   /* 允许内部绝对定位竖直滚动条 */
   --columns-total: calc(
     var(--w-filename) + var(--w-path) + var(--w-size) + var(--w-modified) + var(--w-created) +
-      (4 * var(--col-gap)) + var(--columns-extra)
+      var(--columns-extra)
   );
 }
 
@@ -308,7 +307,6 @@ button:active {
 .columns-events {
   display: grid;
   grid-template-columns: var(--w-event-time) var(--w-event-name) var(--w-event-path);
-  column-gap: var(--col-gap);
   align-items: center;
   width: var(--columns-events-total);
   min-width: var(--columns-events-total);
@@ -373,9 +371,8 @@ button:active {
   grid-template-columns: var(--w-filename) var(--w-path) var(--w-size) var(--w-modified) var(
       --w-created
     );
-  column-gap: var(--col-gap);
   align-items: center;
-  /* Mirror previous JS total width: 3 gaps * 12px + horizontal padding (10px left + 10px right) */
+  /* Mirror previous JS total width without column gaps */
   width: var(--columns-total);
   min-width: var(--columns-total);
 }
