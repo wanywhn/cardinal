@@ -824,23 +824,15 @@ button:active {
 .status-tab__value {
   font-weight: 600;
   font-variant-numeric: tabular-nums;
-  color: inherit;
+  color: var(--status-tab-color, inherit);
 }
 
-.status-tab[data-tone='files'] .status-tab__value {
-  color: #1c7c54;
+.status-tab[data-tone='files'] {
+  --status-tab-color: #1c7c54;
 }
 
-.status-tab[data-tone='events'] .status-tab__value {
-  color: #c05621;
-}
-
-.status-tab.is-active[data-tone='files'] .status-tab__value {
-  color: #1c7c54;
-}
-
-.status-tab.is-active[data-tone='events'] .status-tab__value {
-  color: #c05621;
+.status-tab[data-tone='events'] {
+  --status-tab-color: #c05621;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -866,16 +858,20 @@ button:active {
     color: rgba(248, 250, 252, 0.95);
   }
 
+  .status-tab:focus-visible {
+    color: rgba(248, 250, 252, 0.95);
+  }
+
   .status-tab.is-active {
     color: rgba(248, 250, 252, 0.98);
   }
 
-  .status-tab[data-tone='files'] .status-tab__value {
-    color: #68d391;
+  .status-tab[data-tone='files'] {
+    --status-tab-color: #68d391;
   }
 
-  .status-tab[data-tone='events'] .status-tab__value {
-    color: #ff9770;
+  .status-tab[data-tone='events'] {
+    --status-tab-color: #ff9770;
   }
 }
 
