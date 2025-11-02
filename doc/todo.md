@@ -61,6 +61,9 @@
 + UI 搜索特定文件夹下的文件
 + 拖动进UI后添加文件路径
 + 搜索慢（主要在full path sort上，可以在构建时创建 name -> indexset(按照 full path 排序) 么）
+- react 19 导致query 从有到无慢，排查原因
+  - 使用 useEffectEvent
+- fsevents-sys -> objc2
 ## Pending
 - fs-icon 仍差强人意，目前显示的和 finder 仍然不一致，怀疑Finder用的别的预览 API(QLThumbnailGenerator?)
     + 改成 QLThumbnailGenerator + NSWorkspace 之后仍然和Finder实现不一样，尽力了尽力了
