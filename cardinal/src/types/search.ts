@@ -1,23 +1,24 @@
-export type SearchResultMetadata = {
-  type?: number;
-  size?: number;
-  mtime?: number;
-  ctime?: number;
-};
+export type SearchResultMetadata = Readonly<{
+  type: number;
+  size: number;
+  mtime: number;
+  ctime: number;
+}>;
 
-export type SearchResultRecord = {
-  path?: string;
+export type SearchResultItem = Readonly<{
+  path: string;
   metadata?: SearchResultMetadata;
   size?: number;
   mtime?: number;
   ctime?: number;
   icon?: string;
-};
+}>;
 
-export type SearchResultItem = string | SearchResultRecord;
-
-export type NodeInfoResponse = {
+export type NodeInfoResponse = Readonly<{
   path: string;
   icon?: string | null;
-  metadata?: SearchResultMetadata;
-};
+  metadata?: SearchResultMetadata | null;
+  size?: number | null;
+  mtime?: number | null;
+  ctime?: number | null;
+}>;

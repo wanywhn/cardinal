@@ -89,7 +89,7 @@ function App() {
     let unlistenInit: UnlistenFn | undefined;
 
     const setupListeners = async (): Promise<void> => {
-  unlistenStatus = await listen<StatusBarUpdatePayload>('status_bar_update', (event) => {
+      unlistenStatus = await listen<StatusBarUpdatePayload>('status_bar_update', (event) => {
         if (!isMountedRef.current) return;
         const payload = event.payload;
         if (!payload) return;
@@ -167,7 +167,7 @@ function App() {
     (rowIndex: number, item: SearchResultItem | undefined, rowStyle: CSSProperties) => (
       <FileRow
         key={rowIndex}
-        item={item ?? ''}
+        item={item}
         rowIndex={rowIndex}
         style={{ ...rowStyle, width: 'var(--columns-total)' }} // Enforce column width CSS vars for virtualization rows
         onContextMenu={showContextMenu}

@@ -10,34 +10,29 @@ import type { IconUpdatePayload, IconUpdateWirePayload } from '../types/ipc';
 type IconUpdateEventPayload = readonly IconUpdateWirePayload[] | null | undefined;
 
 export type DataLoaderCache = Map<number, SearchResultItem>;
+type IconOverrideValue = string | null;
 
-const getIcon = (item: SearchResultItem | undefined): string | undefined =>
-  typeof item === 'object' && item !== null ? item.icon : undefined;
+const normalizeIcon = (icon: string | null | undefined): string | undefined => icon ?? undefined;
 
-const mergeIcon = (
-  item: SearchResultItem | undefined,
-  icon: string | undefined,
-): SearchResultItem => {
-  if (item && typeof item === 'object') {
-    return { ...item, icon };
-  }
-  if (typeof item === 'string') {
-    return icon === undefined ? item : ({ path: item, icon } as SearchResultItem);
-  }
-  return { icon } as SearchResultItem;
+const fromNodeInfo = (node: NodeInfoResponse): SearchResultItem => {
+  const metadata = node.metadata ?? undefined;
+  const base: SearchResultItem = {
+    path: node.path,
+    metadata,
+    size: node.size ?? metadata?.size,
+    mtime: node.mtime ?? metadata?.mtime,
+    ctime: node.ctime ?? metadata?.ctime,
+    icon: normalizeIcon(node.icon),
+  };
+  return base;
 };
-
-const fromNodeInfo = (node: NodeInfoResponse): SearchResultItem => ({
-  path: node.path,
-  metadata: node.metadata,
-  icon: node.icon ?? undefined,
-});
 
 export function useDataLoader(results: SlabIndex[]) {
   const loadingRef = useRef<Set<number>>(new Set());
   const versionRef = useRef(0);
   const cacheRef = useRef<DataLoaderCache>(new Map());
   const indexMapRef = useRef<Map<SlabIndex, number>>(new Map());
+  const iconOverridesRef = useRef<Map<number, IconOverrideValue>>(new Map());
   const [cache, setCache] = useState<DataLoaderCache>(() => {
     const initial = new Map<number, SearchResultItem>();
     cacheRef.current = initial;
@@ -49,6 +44,7 @@ export function useDataLoader(results: SlabIndex[]) {
   useEffect(() => {
     versionRef.current += 1;
     loadingRef.current.clear();
+    iconOverridesRef.current.clear();
     const nextCache = new Map<number, SearchResultItem>();
     cacheRef.current = nextCache;
     resultsRef.current = results;
@@ -87,31 +83,34 @@ export function useDataLoader(results: SlabIndex[]) {
           }
 
           setCache((prev) => {
-            // Collect items that truly changed before creating a fresh Map.
-            const changes: Array<{
-              index: number;
-              current: SearchResultItem | undefined;
-              newIcon?: string;
-            }> = [];
+            let nextCache: DataLoaderCache | null = null;
+
             normalized.forEach((update) => {
               const index = indexMapRef.current.get(update.slabIndex);
               if (index === undefined) return;
+
+              const overrideValue: IconOverrideValue = update.icon ?? null;
+              iconOverridesRef.current.set(index, overrideValue);
+
               const current = prev.get(index);
-              const newIcon = update.icon;
-              if (getIcon(current) !== newIcon) {
-                changes.push({ index, current, newIcon });
+              if (!current) return;
+
+              const nextIcon = normalizeIcon(overrideValue);
+              if (current.icon === nextIcon) return;
+
+              if (nextCache === null) {
+                nextCache = new Map(prev);
               }
+
+              nextCache.set(index, { ...current, icon: nextIcon });
             });
 
-            if (changes.length === 0) return prev;
+            if (nextCache === null) {
+              return prev;
+            }
 
-            const next = new Map(prev);
-            changes.forEach(({ index, current, newIcon }) => {
-              next.set(index, mergeIcon(current, newIcon));
-            });
-
-            cacheRef.current = next;
-            return next;
+            cacheRef.current = nextCache;
+            return nextCache;
           });
         });
       } catch (error) {
@@ -138,27 +137,49 @@ export function useDataLoader(results: SlabIndex[]) {
     const versionAtRequest = versionRef.current;
     try {
       const slice = needLoading.map((i) => list[i]);
-        const fetched = await invoke<NodeInfoResponse[]>('get_nodes_info', { results: slice });
+      const fetched = await invoke<NodeInfoResponse[]>('get_nodes_info', { results: slice });
       if (versionRef.current !== versionAtRequest) {
         needLoading.forEach((i) => loadingRef.current.delete(i));
         return;
       }
       setCache((prev) => {
         if (versionRef.current !== versionAtRequest) return prev;
-        const newCache = new Map(prev);
-          needLoading.forEach((originalIndex, idx) => {
-            const fetchedItem = fetched[idx];
-            if (fetchedItem !== undefined) {
-              const normalized = fromNodeInfo(fetchedItem);
-              const existing = newCache.get(originalIndex);
-              const preferredIcon = getIcon(existing) ?? getIcon(normalized);
-              const merged = mergeIcon(normalized, preferredIcon);
-              newCache.set(originalIndex, merged);
-            }
+        let nextCache: DataLoaderCache | null = null;
+
+        needLoading.forEach((originalIndex, idx) => {
+          const fetchedItem = fetched[idx];
           loadingRef.current.delete(originalIndex);
+          if (!fetchedItem) {
+            return;
+          }
+
+          const normalizedItem = fromNodeInfo(fetchedItem);
+          const existing = prev.get(originalIndex);
+          const hasOverride = iconOverridesRef.current.has(originalIndex);
+          const override = hasOverride ? iconOverridesRef.current.get(originalIndex) : undefined;
+
+          const preferredIcon = hasOverride
+            ? normalizeIcon(override)
+            : (existing?.icon ?? normalizedItem.icon);
+
+          const mergedItem =
+            preferredIcon === normalizedItem.icon
+              ? normalizedItem
+              : { ...normalizedItem, icon: preferredIcon };
+
+          if (nextCache === null) {
+            nextCache = new Map(prev);
+          }
+
+          nextCache.set(originalIndex, mergedItem);
         });
-        cacheRef.current = newCache;
-        return newCache;
+
+        if (nextCache === null) {
+          return prev;
+        }
+
+        cacheRef.current = nextCache;
+        return nextCache;
       });
     } catch (err) {
       needLoading.forEach((i) => loadingRef.current.delete(i));

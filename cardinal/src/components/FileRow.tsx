@@ -7,7 +7,7 @@ import type { SearchResultItem } from '../types/search';
 const SEGMENT_SEPARATOR = /[\\/]+/;
 
 type FileRowProps = {
-  item: SearchResultItem;
+  item?: SearchResultItem;
   rowIndex: number;
   style?: CSSProperties;
   onContextMenu?: (event: ReactMouseEvent<HTMLDivElement>, path: string) => void;
@@ -34,12 +34,11 @@ export const FileRow = memo(function FileRow({
 }: FileRowProps): React.JSX.Element | null {
   const highlightTerm = useMemo(() => deriveHighlightTerm(searchQuery), [searchQuery]);
 
-  if (!item || (typeof item !== 'string' && !item?.path)) {
+  if (!item) {
     return null;
   }
 
-  // Accept both plain string paths and rich result objects produced by the search backend.
-  const path = typeof item === 'string' ? item : (item.path ?? '');
+  const path = item.path;
   let filename = '';
   let directoryPath = '';
 
@@ -54,11 +53,10 @@ export const FileRow = memo(function FileRow({
     }
   }
 
-  const materializedItem = typeof item === 'string' ? undefined : item;
-  const metadata = materializedItem?.metadata;
-  const mtimeSec = metadata?.mtime ?? materializedItem?.mtime;
-  const ctimeSec = metadata?.ctime ?? materializedItem?.ctime;
-  const sizeBytes = metadata?.size ?? materializedItem?.size;
+  const metadata = item.metadata;
+  const mtimeSec = metadata?.mtime ?? item.mtime;
+  const ctimeSec = metadata?.ctime ?? item.ctime;
+  const sizeBytes = metadata?.size ?? item.size;
   const sizeText = metadata?.type !== 1 ? formatKB(sizeBytes) : null;
   const mtimeText = formatTimestamp(mtimeSec);
   const ctimeText = formatTimestamp(ctimeSec);
@@ -78,8 +76,8 @@ export const FileRow = memo(function FileRow({
       title={path}
     >
       <div className="filename-column">
-        {materializedItem?.icon ? (
-          <img src={materializedItem.icon} alt="icon" className="file-icon" />
+        {item.icon ? (
+          <img src={item.icon} alt="icon" className="file-icon" />
         ) : (
           <span className="file-icon file-icon-placeholder" aria-hidden="true" />
         )}
