@@ -290,14 +290,13 @@ button:active {
   padding: 0 0 0 var(--container-padding);
 }
 
-/* ReactVirtualized List container */
+/* Virtualized events list container */
 .events-list {
   outline: none !important;
   overflow: auto !important;
 }
 
-.events-list .ReactVirtualized__Grid__innerScrollContainer,
-.events-list .ReactVirtualized__List__innerScrollContainer {
+.events-list-inner {
   /* Ensure rows have the correct width so horizontal overflow can scroll */
   width: var(--columns-events-total);
   min-width: var(--columns-events-total);
