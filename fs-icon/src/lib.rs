@@ -276,10 +276,7 @@ mod tests {
 
             let start_ql = Instant::now();
             let Some(icon_ql) = icon_of_path_ql(&path_str) else {
-                println!(
-                    "QuickLook thumbnail generation failed for path {}",
-                    path_str
-                );
+                println!("QuickLook thumbnail generation failed for path {path_str}");
                 continue;
             };
             let ql_elapsed = start_ql.elapsed();
@@ -300,8 +297,7 @@ mod tests {
         }
 
         println!(
-            "Processed {} files with total durations ns={:?}, ql={:?}",
-            processed, ns_total, ql_total
+            "Processed {processed} files with total durations ns={ns_total:?}, ql={ql_total:?}"
         );
 
         assert!(processed > 0, "no image files were processed");
