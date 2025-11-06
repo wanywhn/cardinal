@@ -38,4 +38,20 @@ npm run tauri build
 
 ---
 
+## Search basics
+
+Cardinal's search box understands several pattern styles to help you locate files fast:
+
+- `substr` – return files whose names contain `substr` as a contiguous fragment.
+- `/prefix` – keep files whose names start with `prefix`.
+- `suffix/` – match files whose names end with `suffix`.
+- `/exact/` – only list files that exactly match `exact`.
+- `a/part/of/path` – search for substrings anywhere in the path, letting you mix directory and filename segments.
+
+Both **case-sensitive** and **regular-expression** modes are available via the toggles next to the search input, so you can tighten queries whenever needed.
+
+### i18n support
+
+Need a different language? Click the 🌍 button in the status bar to switch instantly.
+
 Happy searching!
