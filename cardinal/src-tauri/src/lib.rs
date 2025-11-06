@@ -130,16 +130,16 @@ async fn search(
     state
         .search_tx
         .send(SearchJob { query, options })
-        .map_err(|e| format!("Failed to send search request: {:?}", e))?;
+        .map_err(|e| format!("Failed to send search request: {e:?}"))?;
 
     // Wait for the search result.
     let search_result = state
         .result_rx
         .recv()
-        .map_err(|e| format!("Failed to receive search result: {:?}", e))?;
+        .map_err(|e| format!("Failed to receive search result: {e:?}"))?;
 
     // Propagate any search errors back to the caller.
-    search_result.map_err(|e| format!("Failed to process search result: {:?}", e))
+    search_result.map_err(|e| format!("Failed to process search result: {e:?}"))
 }
 
 #[derive(Serialize)]
@@ -230,6 +230,8 @@ struct IconPayload {
     icon: String,
 }
 
+// TODO(ldm0): refactor to reduce argument count
+#[allow(clippy::too_many_arguments)]
 fn run_background_event_loop(
     app_handle: &tauri::AppHandle,
     mut cache: SearchCache,
@@ -409,12 +411,12 @@ async fn get_nodes_info(
     state
         .node_info_tx
         .send(results.clone())
-        .map_err(|e| format!("Failed to send node info request: {:?}", e))?;
+        .map_err(|e| format!("Failed to send node info request: {e:?}"))?;
 
     let nodes = state
         .node_info_results_rx
         .recv()
-        .map_err(|e| format!("Failed to receive node info results: {:?}", e))?;
+        .map_err(|e| format!("Failed to receive node info results: {e:?}"))?;
 
     let node_infos = nodes
         .into_iter()
@@ -449,7 +451,7 @@ async fn update_icon_viewport(
     state
         .icon_viewport_tx
         .send((id, viewport))
-        .map_err(|e| format!("Failed to send icon viewport update: {:?}", e))
+        .map_err(|e| format!("Failed to send icon viewport update: {e:?}"))
 }
 
 #[tauri::command]
@@ -462,7 +464,7 @@ async fn trigger_rescan(state: State<'_, SearchState>) -> Result<(), String> {
     state
         .rescan_tx
         .send(())
-        .map_err(|e| format!("Failed to request rescan: {:?}", e))?;
+        .map_err(|e| format!("Failed to request rescan: {e:?}"))?;
     Ok(())
 }
 
@@ -476,7 +478,7 @@ fn open_in_finder(path: String) -> Result<(), String> {
             .arg("-R")
             .arg(p)
             .spawn()
-            .map_err(|e| format!("Failed to reveal path in Finder: {}", e))?;
+            .map_err(|e| format!("Failed to reveal path in Finder: {e}"))?;
     }
     #[cfg(target_os = "windows")]
     {
@@ -574,7 +576,7 @@ pub fn run() -> Result<()> {
         });
         // Init background event processing thread
         s.spawn(move || {
-            if !has_full_disk_access(&app_handle) {
+            if !has_full_disk_access(app_handle) {
                 info!("App does not have Full Disk Access, sleeping indefinitely");
                 while !APP_QUIT.load(Ordering::Relaxed) {
                     std::thread::sleep(Duration::from_millis(100));
@@ -686,7 +688,7 @@ pub fn run() -> Result<()> {
             }
             info!("Started background processing thread");
             run_background_event_loop(
-                &app_handle,
+                app_handle,
                 cache,
                 event_watcher,
                 finish_rx,
@@ -769,11 +771,11 @@ fn flush_cache_to_file_once(finish_tx: &Sender<Sender<Option<SearchCache>>>) {
 
 fn has_full_disk_access<R: Runtime>(app_handle: &AppHandle<R>) -> bool {
     // Reference: https://github.com/inket/FullDiskAccess/blob/846e04ea2b84fce843f47d7e7f3421189221829c/Sources/FullDiskAccess/FullDiskAccess.swift#L46
-    let check_dirs = vec!["Library/Containers/com.apple.stocks", "Library/Safari"];
+    let check_dirs = ["Library/Containers/com.apple.stocks", "Library/Safari"];
 
     if let Ok(home_dir) = app_handle.path().home_dir() {
         for check_dir in check_dirs.iter() {
-            if std::fs::read_dir(&home_dir.join(check_dir)).is_ok() {
+            if std::fs::read_dir(home_dir.join(check_dir)).is_ok() {
                 return true;
             }
         }
