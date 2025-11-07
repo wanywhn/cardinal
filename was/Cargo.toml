@@ -2,6 +2,15 @@
 name = "was"
 version = "0.1.0"
 edition = "2024"
+description = "CLI utility that streams filesystem events through the Cardinal SDK."
+license = "MIT"
+repository = "https://github.com/ldm0/cardinal"
+homepage = "https://github.com/ldm0/cardinal"
+documentation = "https://docs.rs/was"
+
+[package.metadata.docs.rs]
+default-target = "aarch64-apple-darwin"
+targets = ["aarch64-apple-darwin", "x86_64-apple-darwin"]
 
 [dependencies]
 cardinal-sdk.path = "../cardinal-sdk"

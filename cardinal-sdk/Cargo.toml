@@ -2,8 +2,15 @@
 name = "cardinal-sdk"
 version = "0.1.0"
 edition = "2024"
+description = "Cardinal's SDK for building macOS file search utilities."
+license = "MIT"
+repository = "https://github.com/ldm0/cardinal"
+homepage = "https://github.com/ldm0/cardinal"
+documentation = "https://docs.rs/cardinal-sdk"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[package.metadata.docs.rs]
+default-target = "aarch64-apple-darwin"
+targets = ["aarch64-apple-darwin", "x86_64-apple-darwin"]
 
 [dependencies]
 bitflags = "2.9.0"
