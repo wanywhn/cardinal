@@ -11,7 +11,7 @@ use search_cache::{HandleFSEError, SearchCache, SearchOptions, SearchResultNode,
 use serde::Serialize;
 use std::{
     path::PathBuf,
-    sync::atomic::AtomicBool,
+    sync::atomic::{AtomicBool, Ordering},
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 use tauri::{AppHandle, Emitter};
@@ -149,38 +149,14 @@ pub fn run_background_event_loop(
             recv(rescan_rx) -> request => {
                 request.expect("Rescan channel closed");
                 info!("Manual rescan requested");
-                update_app_state(app_handle, AppLifecycleState::Initializing);
-                emit_status_bar_update(app_handle, 0, 0);
-
-                #[allow(unused_assignments)]
-                {
-                    event_watcher = EventWatcher::noop();
-                }
-
-                let walk_data = cache.walk_data();
-                let walking_done = AtomicBool::new(false);
-                std::thread::scope(|s| {
-                    s.spawn(|| {
-                        while !walking_done.load(std::sync::atomic::Ordering::Relaxed) {
-                            let dirs = walk_data.num_dirs.load(std::sync::atomic::Ordering::Relaxed);
-                            let files = walk_data.num_files.load(std::sync::atomic::Ordering::Relaxed);
-                            let total = dirs + files;
-                            emit_status_bar_update(app_handle, total, 0);
-                            std::thread::sleep(Duration::from_millis(100));
-                        }
-                    });
-                    cache.rescan_with_walk_data(&walk_data);
-                    walking_done.store(true, std::sync::atomic::Ordering::Relaxed);
-                });
-
-                let (_, watcher) = EventWatcher::spawn(
-                    watch_root.to_string(),
-                    cache.last_event_id(),
+                perform_rescan(
+                    app_handle,
+                    &mut cache,
+                    &mut event_watcher,
+                    watch_root,
                     fse_latency_secs,
+                    &mut history_ready,
                 );
-                event_watcher = watcher;
-                history_ready = false;
-                update_app_state(app_handle, AppLifecycleState::Updating);
             }
             recv(event_watcher) -> events => {
                 let events = events.expect("Event stream closed");
@@ -206,16 +182,14 @@ pub fn run_background_event_loop(
                 let handle_result = cache.handle_fs_events(events);
                 if let Err(HandleFSEError::Rescan) = handle_result {
                     info!("!!!!!!!!!! Rescan triggered !!!!!!!!");
-                    #[allow(unused_assignments)]
-                    {
-                        event_watcher = EventWatcher::noop();
-                    }
-                    update_app_state(app_handle, AppLifecycleState::Initializing);
-                    history_ready = false;
-
-                    cache.rescan();
-                    event_watcher = EventWatcher::spawn(watch_root.to_string(), cache.last_event_id(), fse_latency_secs).1;
-                    update_app_state(app_handle, AppLifecycleState::Updating);
+                    perform_rescan(
+                        app_handle,
+                        &mut cache,
+                        &mut event_watcher,
+                        watch_root,
+                        fse_latency_secs,
+                        &mut history_ready,
+                    );
                 }
 
                 if history_ready && !snapshots.is_empty() {
@@ -224,6 +198,44 @@ pub fn run_background_event_loop(
             }
         }
     }
+}
+
+fn perform_rescan(
+    app_handle: &AppHandle,
+    cache: &mut SearchCache,
+    event_watcher: &mut EventWatcher,
+    watch_root: &str,
+    fse_latency_secs: f64,
+    history_ready: &mut bool,
+) {
+    *event_watcher = EventWatcher::noop();
+    update_app_state(app_handle, AppLifecycleState::Initializing);
+    emit_status_bar_update(app_handle, 0, 0);
+    *history_ready = false;
+
+    let walk_data = cache.walk_data();
+    let walking_done = AtomicBool::new(false);
+    std::thread::scope(|s| {
+        s.spawn(|| {
+            while !walking_done.load(Ordering::Relaxed) {
+                let dirs = walk_data.num_dirs.load(Ordering::Relaxed);
+                let files = walk_data.num_files.load(Ordering::Relaxed);
+                let total = dirs + files;
+                emit_status_bar_update(app_handle, total, 0);
+                std::thread::sleep(Duration::from_millis(100));
+            }
+        });
+        cache.rescan_with_walk_data(&walk_data);
+        walking_done.store(true, Ordering::Relaxed);
+    });
+
+    *event_watcher = EventWatcher::spawn(
+        watch_root.to_string(),
+        cache.last_event_id(),
+        fse_latency_secs,
+    )
+    .1;
+    update_app_state(app_handle, AppLifecycleState::Updating);
 }
 
 fn unix_timestamp_now() -> i64 {
