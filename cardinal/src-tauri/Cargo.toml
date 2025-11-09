@@ -30,7 +30,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 base64 = "0.22"
 rayon = "1.10"
 parking_lot = "0.12"
-tauri-plugin-prevent-default = "3"
+tauri-plugin-prevent-default = "4"
 directories = "6.0.0"
 tauri-plugin-macos-permissions = "2.3.0"
 tauri-plugin-window-state = "2"
