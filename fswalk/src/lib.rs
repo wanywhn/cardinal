@@ -243,6 +243,7 @@ mod tests {
     use std::{
         fs,
         io::Write,
+        path::{Path, PathBuf},
         time::{Duration, Instant},
     };
     use tempdir::TempDir;
@@ -290,6 +291,51 @@ mod tests {
             }
         }
         assert_no_file_metadata(&node);
+    }
+
+    #[test]
+    fn test_walk_sorts_children_and_preserves_global_order() {
+        let tmp = TempDir::new("fswalk_sorted_children").unwrap();
+        let root = tmp.path();
+        fs::create_dir(root.join("dir_beta")).unwrap();
+        fs::create_dir(root.join("dir_alpha")).unwrap();
+        fs::File::create(root.join("file_delta.txt")).unwrap();
+        fs::File::create(root.join("file_alpha.txt")).unwrap();
+        fs::File::create(root.join("file_gamma.txt")).unwrap();
+
+        let walk_data = WalkData::simple(false);
+        let node = walk_it(root, &walk_data).expect("walked tree");
+
+        let observed: Vec<&str> = node.children.iter().map(|child| &*child.name).collect();
+        let expected = vec![
+            "dir_alpha",
+            "dir_beta",
+            "file_alpha.txt",
+            "file_delta.txt",
+            "file_gamma.txt",
+        ];
+        assert_eq!(observed, expected);
+
+        fn collect_paths(node: &Node, prefix: &Path, acc: &mut Vec<PathBuf>) {
+            let current = if prefix.as_os_str().is_empty() {
+                PathBuf::from(&*node.name)
+            } else {
+                prefix.join(&*node.name)
+            };
+            acc.push(current.clone());
+            for child in &node.children {
+                collect_paths(child, &current, acc);
+            }
+        }
+
+        let mut preorder = Vec::new();
+        collect_paths(&node, Path::new(""), &mut preorder);
+        let mut sorted = preorder.clone();
+        sorted.sort();
+        assert_eq!(
+            preorder, sorted,
+            "preorder traversal should match lexicographic path order"
+        );
     }
 
     #[test]

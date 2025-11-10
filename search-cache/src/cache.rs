@@ -814,6 +814,8 @@ fn construct_node_slab_name_index(
     let slab_node = SlabNode::new(parent, name, metadata);
     let index = slab.insert(slab_node);
     unsafe {
+        // SAFETY: fswalk sorts each directory's children by name before we recurse,
+        // so this preorder traversal visits nodes in lexicographic path order.
         name_index.add_index_ordered(name, index);
     }
     slab[index].children = node
@@ -856,8 +858,135 @@ pub static NAME_POOL: LazyLock<NamePool> = LazyLock::new(NamePool::new);
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::fs;
+    use std::{fs, path::PathBuf};
     use tempdir::TempDir;
+
+    fn make_node(name: &str, children: Vec<Node>) -> Node {
+        Node {
+            children,
+            name: name.into(),
+            metadata: None,
+        }
+    }
+
+    fn make_leaf(name: &str) -> Node {
+        make_node(name, vec![])
+    }
+
+    fn push_child(
+        slab: &mut ThinSlab<SlabNode>,
+        parent: SlabIndex,
+        name: &str,
+    ) -> SlabIndex {
+        let idx = slab.insert(SlabNode::new(
+            Some(parent),
+            NAME_POOL.push(name),
+            SlabNodeMetadataCompact::none(),
+        ));
+        slab[parent].children.push(idx);
+        idx
+    }
+
+    fn manual_target_tree_file_nodes() -> (FileNodes, [SlabIndex; 3]) {
+        let mut slab = ThinSlab::new();
+        let root_idx =
+            slab.insert(SlabNode::new(None, NAME_POOL.push("root"), SlabNodeMetadataCompact::none()));
+        let alpha = push_child(&mut slab, root_idx, "alpha");
+        let beta = push_child(&mut slab, root_idx, "beta");
+        let root_target = push_child(&mut slab, root_idx, "target.txt");
+        let alpha_target = push_child(&mut slab, alpha, "target.txt");
+        let beta_target = push_child(&mut slab, beta, "target.txt");
+        let file_nodes = FileNodes::new(PathBuf::from("/virtual/root"), slab, root_idx);
+        (file_nodes, [root_target, alpha_target, beta_target])
+    }
+
+    #[test]
+    fn test_construct_node_slab_name_index_preserves_path_order() {
+        let tree = make_node(
+            "root",
+            vec![
+                make_node("alpha", vec![make_leaf("shared")]),
+                make_node("beta", vec![make_node("gamma", vec![make_leaf("shared")])]),
+                make_leaf("shared"),
+            ],
+        );
+        let mut slab = ThinSlab::new();
+        let mut name_index = NameIndex::default();
+        let root = construct_node_slab_name_index(None, &tree, &mut slab, &mut name_index);
+        let file_nodes = FileNodes::new(PathBuf::from("/virtual/root"), slab, root);
+
+        let shared_entries = name_index.get("shared").expect("shared entries");
+        assert_eq!(shared_entries.len(), 3);
+        let paths: Vec<PathBuf> = shared_entries
+            .iter()
+            .map(|index| file_nodes.node_path(*index).expect("path must exist"))
+            .collect();
+        let mut sorted = paths.clone();
+        sorted.sort();
+        assert_eq!(
+            paths, sorted,
+            "shared entries must follow lexicographic path order"
+        );
+    }
+
+    #[test]
+    fn test_name_index_add_index_sorts_paths() {
+        let (file_nodes, targets) = manual_target_tree_file_nodes();
+        let mut name_index = NameIndex::default();
+
+        for &index in targets.iter().rev() {
+            name_index.add_index("target.txt", index, &file_nodes);
+        }
+
+        let entries = name_index
+            .get("target.txt")
+            .expect("target.txt entries must exist");
+        assert_eq!(entries.len(), 3);
+        let paths: Vec<PathBuf> = entries
+            .iter()
+            .map(|index| file_nodes.node_path(*index).expect("path exists"))
+            .collect();
+        let mut sorted = paths.clone();
+        sorted.sort();
+        assert_eq!(paths, sorted, "add_index must maintain lexicographic order");
+    }
+
+    #[test]
+    fn test_walk_fs_with_walk_data_preserves_name_index_order() {
+        let temp_dir =
+            TempDir::new("walk_fs_with_walk_data_orders").expect("Failed to create temp dir");
+        let root = temp_dir.path();
+        fs::create_dir(root.join("beta")).unwrap();
+        fs::create_dir(root.join("alpha")).unwrap();
+        fs::File::create(root.join("target.txt")).unwrap();
+        fs::File::create(root.join("alpha/target.txt")).unwrap();
+        fs::File::create(root.join("beta/target.txt")).unwrap();
+
+        let walk_data = WalkData::simple(false);
+        let cache = SearchCache::walk_fs_with_walk_data(
+            root.to_path_buf(),
+            &walk_data,
+            None,
+            None,
+        )
+        .expect("walk cache");
+
+        let entries = cache
+            .name_index
+            .get("target.txt")
+            .expect("target.txt entries");
+        assert_eq!(entries.len(), 3);
+        let paths: Vec<PathBuf> = entries
+            .iter()
+            .map(|index| cache.file_nodes.node_path(*index).expect("path exists"))
+            .collect();
+        let mut sorted = paths.clone();
+        sorted.sort();
+        assert_eq!(
+            paths, sorted,
+            "walk_fs_with_walk_data must yield lexicographically ordered slab indices"
+        );
+    }
 
     #[test]
     fn test_search_cache_walk_and_verify() {
