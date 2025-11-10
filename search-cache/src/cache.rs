@@ -1,5 +1,6 @@
 use crate::{
-    NameIndex, SearchResultNode, SlabIndex, SlabNode, SlabNodeMetadataCompact, State, ThinSlab,
+    FileNodes, NameIndex, SearchOptions, SearchResultNode, SegmentKind, SegmentMatcher, SlabIndex,
+    SlabNode, SlabNodeMetadataCompact, State, ThinSlab, build_segment_matchers,
     persistent::{PersistentStorage, read_cache_from_file, write_cache_to_file},
 };
 use anyhow::{Context, Result, anyhow, bail};
@@ -7,13 +8,11 @@ use cardinal_sdk::{EventFlag, FsEvent, ScanType, current_event_id};
 use fswalk::{Node, NodeMetadata, WalkData, walk_it};
 use hashbrown::HashSet;
 use namepool::NamePool;
-use query_segmentation::{Segment, query_segmentation};
-use regex::{Regex, RegexBuilder};
+use query_segmentation::query_segmentation;
 use std::{
     collections::BTreeSet,
     ffi::OsStr,
     io::ErrorKind,
-    ops::{Deref, DerefMut},
     path::{Path, PathBuf},
     sync::{LazyLock, atomic::AtomicBool},
     time::Instant,
@@ -22,152 +21,12 @@ use thin_vec::ThinVec;
 use tracing::{debug, info};
 use typed_num::Num;
 
-#[derive(Debug)]
-pub struct FileNodes {
-    path: PathBuf,
-    slab: ThinSlab<SlabNode>,
-    root: SlabIndex,
-}
-
-impl FileNodes {
-    fn new(path: PathBuf, slab: ThinSlab<SlabNode>, root: SlabIndex) -> Self {
-        Self { path, slab, root }
-    }
-
-    fn root(&self) -> SlabIndex {
-        self.root
-    }
-
-    pub fn node_path(&self, index: SlabIndex) -> Option<PathBuf> {
-        let mut current = index;
-        let mut segments = vec![];
-        while let Some(parent) = self.slab.get(current)?.name_and_parent.parent() {
-            segments.push(self.slab.get(current)?.name_and_parent.as_str());
-            current = parent;
-        }
-        Some(
-            self.path
-                .iter()
-                .chain(segments.iter().rev().map(OsStr::new))
-                .collect(),
-        )
-    }
-
-    fn path(&self) -> &Path {
-        &self.path
-    }
-
-    fn into_parts(self) -> (PathBuf, SlabIndex, ThinSlab<SlabNode>) {
-        let Self { path, slab, root } = self;
-        (path, root, slab)
-    }
-}
-
-impl Deref for FileNodes {
-    type Target = ThinSlab<SlabNode>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.slab
-    }
-}
-
-impl DerefMut for FileNodes {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.slab
-    }
-}
-
 pub struct SearchCache {
     file_nodes: FileNodes,
     last_event_id: u64,
     name_index: NameIndex,
     ignore_paths: Option<Vec<PathBuf>>,
     cancel: Option<&'static AtomicBool>,
-}
-
-#[derive(Debug, Clone, Copy, Default)]
-pub struct SearchOptions {
-    pub use_regex: bool,
-    pub case_insensitive: bool,
-}
-
-#[derive(Clone, Copy, Debug)]
-enum SegmentKind {
-    Substr,
-    Prefix,
-    Suffix,
-    Exact,
-}
-
-enum SegmentMatcher {
-    Plain { kind: SegmentKind, needle: String },
-    Regex { regex: Regex },
-}
-
-impl SegmentMatcher {
-    fn matches(&self, candidate: &str) -> bool {
-        match self {
-            SegmentMatcher::Plain { kind, needle } => match kind {
-                SegmentKind::Substr => candidate.contains(needle),
-                SegmentKind::Prefix => candidate.starts_with(needle),
-                SegmentKind::Suffix => candidate.ends_with(needle),
-                SegmentKind::Exact => candidate == needle,
-            },
-            SegmentMatcher::Regex { regex } => regex.is_match(candidate),
-        }
-    }
-}
-
-fn segment_kind(segment: &Segment<'_>) -> SegmentKind {
-    match segment {
-        Segment::Substr(_) => SegmentKind::Substr,
-        Segment::Prefix(_) => SegmentKind::Prefix,
-        Segment::Suffix(_) => SegmentKind::Suffix,
-        Segment::Exact(_) => SegmentKind::Exact,
-    }
-}
-
-fn segment_value<'s>(segment: &Segment<'s>) -> &'s str {
-    match segment {
-        Segment::Substr(value)
-        | Segment::Prefix(value)
-        | Segment::Suffix(value)
-        | Segment::Exact(value) => value,
-    }
-}
-
-fn build_segment_matchers(
-    segments: &[Segment<'_>],
-    options: SearchOptions,
-) -> Result<Vec<SegmentMatcher>, regex::Error> {
-    segments
-        .iter()
-        .map(|segment| {
-            let kind = segment_kind(segment);
-            let value = segment_value(segment);
-            if options.use_regex || options.case_insensitive {
-                let base = if options.use_regex {
-                    value.to_owned()
-                } else {
-                    regex::escape(value)
-                };
-                let pattern = match kind {
-                    SegmentKind::Substr => base,
-                    SegmentKind::Prefix => format!("^(?:{base})"),
-                    SegmentKind::Suffix => format!("(?:{base})$"),
-                    SegmentKind::Exact => format!("^(?:{base})$"),
-                };
-                let mut builder = RegexBuilder::new(&pattern);
-                builder.case_insensitive(options.case_insensitive);
-                builder.build().map(|regex| SegmentMatcher::Regex { regex })
-            } else {
-                Ok(SegmentMatcher::Plain {
-                    kind,
-                    needle: value.to_string(),
-                })
-            }
-        })
-        .collect()
 }
 
 impl std::fmt::Debug for SearchCache {
@@ -873,11 +732,7 @@ mod tests {
         make_node(name, vec![])
     }
 
-    fn push_child(
-        slab: &mut ThinSlab<SlabNode>,
-        parent: SlabIndex,
-        name: &str,
-    ) -> SlabIndex {
+    fn push_child(slab: &mut ThinSlab<SlabNode>, parent: SlabIndex, name: &str) -> SlabIndex {
         let idx = slab.insert(SlabNode::new(
             Some(parent),
             NAME_POOL.push(name),
@@ -889,8 +744,11 @@ mod tests {
 
     fn manual_target_tree_file_nodes() -> (FileNodes, [SlabIndex; 3]) {
         let mut slab = ThinSlab::new();
-        let root_idx =
-            slab.insert(SlabNode::new(None, NAME_POOL.push("root"), SlabNodeMetadataCompact::none()));
+        let root_idx = slab.insert(SlabNode::new(
+            None,
+            NAME_POOL.push("root"),
+            SlabNodeMetadataCompact::none(),
+        ));
         let alpha = push_child(&mut slab, root_idx, "alpha");
         let beta = push_child(&mut slab, root_idx, "beta");
         let root_target = push_child(&mut slab, root_idx, "target.txt");
@@ -963,13 +821,8 @@ mod tests {
         fs::File::create(root.join("beta/target.txt")).unwrap();
 
         let walk_data = WalkData::simple(false);
-        let cache = SearchCache::walk_fs_with_walk_data(
-            root.to_path_buf(),
-            &walk_data,
-            None,
-            None,
-        )
-        .expect("walk cache");
+        let cache = SearchCache::walk_fs_with_walk_data(root.to_path_buf(), &walk_data, None, None)
+            .expect("walk cache");
 
         let entries = cache
             .name_index

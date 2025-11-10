@@ -1,4 +1,4 @@
-use crate::{NAME_POOL, SlabIndex, cache::FileNodes};
+use crate::{FileNodes, NAME_POOL, SlabIndex};
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, time::Instant};
 use thin_vec::ThinVec;
