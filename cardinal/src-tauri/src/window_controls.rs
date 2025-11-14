@@ -45,8 +45,9 @@ pub fn trigger_quick_launch<R: Runtime>(window: &WebviewWindow<R>) {
 pub fn toggle_window<R: Runtime>(window: &WebviewWindow<R>) -> WindowToggle {
     let is_visible = window.is_visible().unwrap_or(true);
     let is_minimized = window.is_minimized().unwrap_or(false);
+    let is_focused = window.is_focused().unwrap_or(false);
 
-    if is_visible && !is_minimized {
+    if is_visible && !is_minimized && is_focused {
         if hide_window(window) {
             WindowToggle::Hidden
         } else {
