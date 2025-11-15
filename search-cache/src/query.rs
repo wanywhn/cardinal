@@ -24,7 +24,7 @@ impl SearchCache {
         token: CancellationToken,
     ) -> Result<Option<Vec<SlabIndex>>> {
         match expr {
-            Expr::Empty => Ok(Some(Vec::new())),
+            Expr::Empty => Ok(self.search_empty(token)),
             Expr::Term(term) => self.evaluate_term(term, options, token),
             Expr::Not(inner) => self.evaluate_not(inner, None, options, token),
             Expr::And(parts) => self.evaluate_and(parts, options, token),
@@ -81,10 +81,7 @@ impl SearchCache {
             if matches!(part, Expr::Empty) {
                 continue;
             }
-            let candidate = match part {
-                Expr::Not(inner) => self.evaluate_not(inner, None, options, token)?,
-                _ => self.evaluate_expr(part, options, token)?,
-            };
+            let candidate = self.evaluate_expr(part, options, token)?;
             let Some(nodes) = candidate else {
                 return Ok(None);
             };

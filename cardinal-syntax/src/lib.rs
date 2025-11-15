@@ -2,8 +2,7 @@
 //!
 //! `cardinal-syntax` turns raw Everything-style queries into a structured AST so
 //! the rest of Cardinal can reason about filters, boolean logic, and phrases
-//! without duplicating the parsing rules from the original Windows tool. The
-//! grammar implemented here mirrors the notes in `target/everything.md`, so any
+//! without duplicating the parsing rules from the original Windows tool. Any
 //! example shown in that manual should be accepted by [`parse_query`].
 //!
 //! ## Example
@@ -786,9 +785,6 @@ impl<'a> Parser<'a> {
         }
 
         let mut expr = self.parse_primary()?;
-        if matches!(expr, Expr::Empty) {
-            return Err(self.error("expected expression"));
-        }
         if negations % 2 == 1 {
             expr = Expr::Not(Box::new(expr));
         }

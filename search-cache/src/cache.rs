@@ -186,9 +186,6 @@ impl SearchCache {
         options: SearchOptions,
         cancellation_token: CancellationToken,
     ) -> Result<Option<Vec<SlabIndex>>> {
-        if line.trim().is_empty() {
-            bail!("Unprocessable query: {line:?}");
-        }
         let parsed = parse_query(line).map_err(|err| anyhow!("Failed to parse query: {}", err))?;
         let search_time = Instant::now();
         let result = self.evaluate_expr(&parsed.expr, options, cancellation_token);
