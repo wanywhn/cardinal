@@ -1325,6 +1325,46 @@ mod tests {
     }
 
     #[test]
+    fn parses_parentheses_group() {
+        let query = parse_query("(foo bar) baz").unwrap();
+        let Expr::And(parts) = query.expr else {
+            panic!("expected conjunction");
+        };
+        assert_eq!(parts.len(), 2);
+
+        let Expr::And(group_parts) = &parts[0] else {
+            panic!("expected grouped conjunction");
+        };
+        assert_eq!(group_parts.len(), 2);
+        assert_eq!(group_parts[0], word("foo"));
+        assert_eq!(group_parts[1], word("bar"));
+        assert_eq!(parts[1], word("baz"));
+    }
+
+    #[test]
+    fn parses_nested_groups() {
+        let query = parse_query("(foo <bar|baz>) qux").unwrap();
+        let Expr::And(parts) = query.expr else {
+            panic!("expected conjunction");
+        };
+        assert_eq!(parts.len(), 2);
+
+        let Expr::And(group_parts) = &parts[0] else {
+            panic!("expected grouped conjunction");
+        };
+        assert_eq!(group_parts.len(), 2);
+        assert_eq!(group_parts[0], word("foo"));
+
+        let Expr::Or(region) = &group_parts[1] else {
+            panic!("expected OR group");
+        };
+        assert_eq!(region.len(), 2);
+        assert_eq!(region[0], word("bar"));
+        assert_eq!(region[1], word("baz"));
+        assert_eq!(parts[1], word("qux"));
+    }
+
+    #[test]
     fn parses_filters_with_lists_and_ranges() {
         let query = parse_query("ext:txt;doc size:1mb..10mb").unwrap();
         let Expr::And(parts) = query.expr else {
