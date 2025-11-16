@@ -927,6 +927,28 @@ mod tests {
     }
 
     #[test]
+    fn and_with_not_propagates_cancellation() {
+        let temp_dir = TempDir::new("and_with_not_propagates_cancellation").unwrap();
+        let dir = temp_dir.path();
+
+        fs::File::create(dir.join("foo.txt")).unwrap();
+        fs::File::create(dir.join("bar.txt")).unwrap();
+
+        let cache = SearchCache::walk_fs(dir.to_path_buf());
+        let token = CancellationToken::new(10);
+        let _ = CancellationToken::new(11); // cancel previous token
+
+        let result = cache.search_with_options(
+            "bar !foo",
+            SearchOptions {
+                case_insensitive: false,
+            },
+            token,
+        );
+        assert!(matches!(result, Ok(None)));
+    }
+
+    #[test]
     fn test_search_case_insensitive_option() {
         let temp_dir = TempDir::new("test_search_case_insensitive_option").unwrap();
         let dir = temp_dir.path();
