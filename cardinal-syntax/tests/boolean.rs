@@ -55,6 +55,15 @@ fn trailing_or_creates_empty_last_operand() {
 }
 
 #[test]
+fn or_with_empty_phrase_creates_empty_operand() {
+    let expr = parse_ok("a|\"\"");
+    let parts = as_or(&expr);
+    assert_eq!(parts.len(), 2);
+    word_is(&parts[0], "a");
+    assert!(is_empty(&parts[1]));
+}
+
+#[test]
 fn not_binds_tighter_than_or_and_and() {
     let expr = parse_ok("!foo | bar baz");
     let parts = as_and(&expr);

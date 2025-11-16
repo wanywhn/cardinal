@@ -27,6 +27,12 @@ fn parses_quoted_phrase() {
 }
 
 #[test]
+fn empty_phrase_produces_empty_expression() {
+    let expr = parse_ok("\"\"");
+    assert!(is_empty(&expr));
+}
+
+#[test]
 fn double_quotes_are_literal_no_escapes() {
     // No escape semantics: backslashes are preserved, quotes terminate.
     let expr = parse_ok("\"a \\ b c\"");

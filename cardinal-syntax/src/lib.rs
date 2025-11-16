@@ -764,7 +764,11 @@ impl<'a> Parser<'a> {
             '>' | ')' => Err(self.error("unexpected closing delimiter")),
             '"' => {
                 let text = self.parse_phrase_string()?;
-                Ok(Expr::Term(Term::Phrase(text)))
+                if text.is_empty() {
+                    Ok(Expr::Empty)
+                } else {
+                    Ok(Expr::Term(Term::Phrase(text)))
+                }
             }
             _ => {
                 let term = self.parse_word_like()?;
