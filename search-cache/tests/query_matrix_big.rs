@@ -37,9 +37,11 @@ fn build_cache() -> SearchCache {
         "src/util/mod.rs",
         "src/util/fs.rs",
     ];
-    for file in files { 
+    for file in files {
         let full = root_path.join(file);
-        if let Some(parent) = full.parent() { std::fs::create_dir_all(parent).unwrap(); }
+        if let Some(parent) = full.parent() {
+            std::fs::create_dir_all(parent).unwrap();
+        }
         std::fs::File::create(full).unwrap();
     }
     SearchCache::walk_fs(root_path)
