@@ -25,6 +25,7 @@ enumn = "0.1"
 thin-vec = { version = "0.2.14", features = ["serde"] }
 hashbrown = { version = "0.16.0", features = ["serde"] }
 regex = "1"
+jiff = "0.2"
 
 [dev-dependencies]
 tempdir = "0.3"

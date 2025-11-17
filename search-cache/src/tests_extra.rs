@@ -1,9 +1,53 @@
 #[cfg(test)]
 mod extra {
-    use crate::SearchCache;
+    use crate::{SearchCache, SlabIndex, SlabNodeMetadataCompact};
+    use fswalk::{NodeFileType, NodeMetadata};
+    use jiff::{Timestamp, civil::Date, tz::TimeZone};
     use search_cancel::CancellationToken;
-    use std::{fs, path::PathBuf};
+    use std::{fs, num::NonZeroU64, path::PathBuf};
     use tempdir::TempDir;
+
+    const SECONDS_PER_DAY: i64 = 24 * 60 * 60;
+
+    fn set_file_times(cache: &mut SearchCache, index: SlabIndex, created: i64, modified: i64) {
+        let metadata = NodeMetadata {
+            r#type: NodeFileType::File,
+            size: 0,
+            ctime: NonZeroU64::new(created as u64),
+            mtime: NonZeroU64::new(modified as u64),
+        };
+        cache.file_nodes[index].metadata = SlabNodeMetadataCompact::some(metadata);
+    }
+
+    fn assert_file_hits(cache: &SearchCache, indices: &[SlabIndex], expected: &[&str]) {
+        let mut names: Vec<String> = indices
+            .iter()
+            .filter(|idx| cache.file_nodes[**idx].metadata.file_type_hint() == NodeFileType::File)
+            .filter_map(|idx| cache.node_path(*idx))
+            .filter_map(|path| {
+                path.file_name()
+                    .map(|name| name.to_string_lossy().into_owned())
+            })
+            .collect();
+        names.sort();
+        let mut expected_vec: Vec<String> = expected.iter().map(|s| s.to_string()).collect();
+        expected_vec.sort();
+        assert_eq!(names, expected_vec);
+    }
+
+    fn ts_for_date(year: i32, month: u32, day: u32) -> i64 {
+        let tz = TimeZone::system();
+        let date = Date::new(
+            i16::try_from(year).expect("year fits in range"),
+            month as i8,
+            day as i8,
+        )
+        .expect("valid date components");
+        tz.to_zoned(date.at(12, 0, 0, 0))
+            .expect("valid local date")
+            .timestamp()
+            .as_second()
+    }
 
     #[test]
     fn test_search_empty_returns_all_nodes() {
@@ -275,6 +319,49 @@ mod extra {
             cache.file_nodes[index].metadata.is_some(),
             "size filter should populate node metadata"
         );
+    }
+
+    #[test]
+    fn test_date_filters_cover_keywords_and_ranges() {
+        let tmp = TempDir::new("date_filters").unwrap();
+        fs::write(tmp.path().join("recent.txt"), b"x").unwrap();
+        fs::write(tmp.path().join("old.txt"), b"x").unwrap();
+        fs::write(tmp.path().join("very_old.txt"), b"x").unwrap();
+        let mut cache = SearchCache::walk_fs(tmp.path().to_path_buf());
+
+        let recent_idx = cache.search("recent.txt").unwrap()[0];
+        let old_idx = cache.search("old.txt").unwrap()[0];
+        let ancient_idx = cache.search("very_old.txt").unwrap()[0];
+
+        let now = Timestamp::now().as_second();
+        set_file_times(&mut cache, recent_idx, now, now);
+        set_file_times(
+            &mut cache,
+            old_idx,
+            ts_for_date(2020, 5, 10),
+            now - 40 * SECONDS_PER_DAY,
+        );
+        set_file_times(
+            &mut cache,
+            ancient_idx,
+            ts_for_date(2014, 8, 15),
+            ts_for_date(2014, 8, 15),
+        );
+
+        let dm_today = cache.search("dm:today").unwrap();
+        assert_file_hits(&cache, &dm_today, &["recent.txt"]);
+
+        let dm_past_month = cache.search("dm:pastmonth").unwrap();
+        assert_file_hits(&cache, &dm_past_month, &["recent.txt"]);
+
+        let dm_range = cache.search("dm:>=2020-01-01").unwrap();
+        assert_file_hits(&cache, &dm_range, &["recent.txt", "old.txt"]);
+
+        let dc_year = cache.search("dc:2020/01/01-2020/12/31").unwrap();
+        assert_file_hits(&cache, &dc_year, &["old.txt"]);
+
+        let dc_hyphen = cache.search("dc:1/8/2014-31/8/2014").unwrap();
+        assert_file_hits(&cache, &dc_hyphen, &["very_old.txt"]);
     }
 
     #[test]

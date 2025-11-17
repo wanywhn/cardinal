@@ -43,9 +43,10 @@ NOT > OR > AND, so group expressions (e.g., `good (*.mp3|*.wav)`) any time you w
 | `type:`             | Category filters such as `type:picture`, `type:video`, `type:doc`, `type:archive`, etc.    |
 | `audio:` / `video:` / `doc:` / `exe:` | Shorthand macros equivalent to `type:audio`, `type:video`, etc.          |
 | `size:`             | Filter by file size with comparisons (`size:>1GB`), ranges (`size:1mb..10mb`), or keywords (`size:tiny`). |
+| `dm:` / `dc:`       | Date modified/created filters with keywords (`dm:today`, `dc:thisweek`) or ranges (`dm:2024/01/01-2024/12/31`). |
 | `regex:`            | Regular expressions (`regex:^README\..*`).                                                 |
 
-Date-based filters (e.g., `dm:`, `dc:`) already parse but are not executed by the current search engine, so they are intentionally omitted here until runtime support lands.
+Keywords such as `today`, `yesterday`, `thisweek`, `lastweek`, `thismonth`, `lastmonth`, `thisyear`, `lastyear`, `pastweek`, `pastmonth`, and `pastyear` work inside `dm:` / `dc:` filters, and you can combine them with comparison operators (`dm:>=2024-01-01`) or explicit ranges.
 
 ## Additional Notes
 

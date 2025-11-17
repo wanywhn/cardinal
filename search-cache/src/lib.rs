@@ -24,3 +24,7 @@ pub use type_and_size::*;
 
 #[cfg(test)]
 mod tests_extra;
+#[cfg(test)]
+mod tests_large;
+#[cfg(test)]
+mod tests_date_edge;
