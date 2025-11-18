@@ -81,22 +81,22 @@ fn or_sequences_with_varied_spacing() {
 fn filters_interleave_with_terms_and_groups() {
     let expr = parse_ok("(foo bar) size:>1mb <D:|E:> ext:jpg;png baz");
     let parts = as_and(&expr);
-    // (foo bar)
-    let p0 = as_and(&parts[0]);
-    assert_eq!(p0.len(), 2);
+    // foo bar
+    word_is(&parts[0], "foo");
+    word_is(&parts[1], "bar");
     // size:>1mb
-    filter_is_kind(&parts[1], &FilterKind::Size);
-    filter_arg_is_comparison(&parts[1], ComparisonOp::Gt, "1mb");
+    filter_is_kind(&parts[2], &FilterKind::Size);
+    filter_arg_is_comparison(&parts[2], ComparisonOp::Gt, "1mb");
     // <D:|E:>
-    let or_parts = as_or(&parts[2]);
+    let or_parts = as_or(&parts[3]);
     assert_eq!(or_parts.len(), 2);
     filter_is_custom(&or_parts[0], "D");
     filter_is_custom(&or_parts[1], "E");
     // ext:jpg;png
-    filter_is_kind(&parts[3], &FilterKind::Ext);
-    filter_arg_is_list(&parts[3], &["jpg", "png"]);
+    filter_is_kind(&parts[4], &FilterKind::Ext);
+    filter_arg_is_list(&parts[4], &["jpg", "png"]);
     // baz
-    word_is(&parts[4], "baz");
+    word_is(&parts[5], "baz");
 }
 
 #[test]

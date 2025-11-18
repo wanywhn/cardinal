@@ -22,31 +22,26 @@ fn angle_bracket_group_with_or() {
 fn parentheses_group_with_and_inside() {
     let expr = parse_ok("(foo bar) baz");
     let parts = as_and(&expr);
-    assert_eq!(parts.len(), 2);
-    let inner = &parts[0];
-    let gparts = as_and(inner);
-    word_is(&gparts[0], "foo");
-    word_is(&gparts[1], "bar");
-    word_is(&parts[1], "baz");
+    assert_eq!(parts.len(), 3);
+    word_is(&parts[0], "foo");
+    word_is(&parts[1], "bar");
+    word_is(&parts[2], "baz");
 }
 
 #[test]
 fn nested_groups_or_in_angle_and_and_in_parens() {
     let expr = parse_ok("(foo <bar|baz>) qux");
     let parts = as_and(&expr);
-    assert_eq!(parts.len(), 2);
+    assert_eq!(parts.len(), 3);
 
-    let left = &parts[0];
-    let lp = as_and(left);
-    assert_eq!(lp.len(), 2);
-    word_is(&lp[0], "foo");
+    word_is(&parts[0], "foo");
 
-    let region = &lp[1];
+    let region = &parts[1];
     let region_parts = as_or(region);
     word_is(&region_parts[0], "bar");
     word_is(&region_parts[1], "baz");
 
-    word_is(&parts[1], "qux");
+    word_is(&parts[2], "qux");
 }
 
 #[test]

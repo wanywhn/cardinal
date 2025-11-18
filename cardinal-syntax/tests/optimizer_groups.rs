@@ -39,3 +39,29 @@ fn block_04_groups_precedence() {
     word_is(&and11[0], "a");
     word_is(&and11[1], "d");
 }
+
+#[test]
+fn nested_and_groups_are_flattened() {
+    let expr = parse_ok("(a b) c (d (e f))");
+    let parts = as_and(&expr);
+    assert_eq!(parts.len(), 6);
+    word_is(&parts[0], "a");
+    word_is(&parts[1], "b");
+    word_is(&parts[2], "c");
+    word_is(&parts[3], "d");
+    word_is(&parts[4], "e");
+    word_is(&parts[5], "f");
+}
+
+#[test]
+fn nested_or_groups_are_flattened() {
+    let expr = parse_ok("(a|b)|(c|d|(e|f))");
+    let parts = as_or(&expr);
+    assert_eq!(parts.len(), 6);
+    word_is(&parts[0], "a");
+    word_is(&parts[1], "b");
+    word_is(&parts[2], "c");
+    word_is(&parts[3], "d");
+    word_is(&parts[4], "e");
+    word_is(&parts[5], "f");
+}

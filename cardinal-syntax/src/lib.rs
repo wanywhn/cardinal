@@ -78,28 +78,46 @@ fn optimize_expr(expr: Expr) -> Expr {
 /// Normalizes AND expressions by eliding `Expr::Empty`, flattening single-item
 /// conjunctions, and reordering metadata filters to the end of the chain.
 fn optimize_and(parts: Vec<Expr>) -> Expr {
-    let mut parts: Vec<Expr> = parts
-        .into_iter()
-        .map(optimize_expr)
-        .filter(|expr| !matches!(expr, Expr::Empty))
-        .collect();
+    let mut flattened = Vec::new();
+    for expr in parts.into_iter().map(optimize_expr) {
+        match expr {
+            Expr::Empty => {}
+            Expr::And(nested) => flattened.extend(nested),
+            other => flattened.push(other),
+        }
+    }
 
-    match parts.len() {
+    match flattened.len() {
         0 => Expr::Empty,
-        1 => parts.pop().unwrap(),
+        1 => flattened.pop().unwrap(),
         _ => {
-            move_metadata_filters_to_tail(&mut parts);
-            Expr::And(parts)
+            move_metadata_filters_to_tail(&mut flattened);
+            Expr::And(flattened)
         }
     }
 }
 
 fn optimize_or(parts: Vec<Expr>) -> Expr {
-    let parts: Vec<Expr> = parts.into_iter().map(optimize_expr).collect();
-    if parts.iter().any(|expr| matches!(expr, Expr::Empty)) {
+    let mut flattened = Vec::new();
+    let mut has_empty = false;
+
+    for expr in parts.into_iter().map(optimize_expr) {
+        match expr {
+            Expr::Empty => {
+                has_empty = true;
+                break;
+            }
+            Expr::Or(nested) => flattened.extend(nested),
+            other => flattened.push(other),
+        }
+    }
+
+    if has_empty {
         Expr::Empty
+    } else if flattened.len() == 1 {
+        flattened.pop().unwrap()
     } else {
-        Expr::Or(parts)
+        Expr::Or(flattened)
     }
 }
 
