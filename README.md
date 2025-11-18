@@ -27,6 +27,7 @@ Cardinal now speaks an Everything-compatible syntax layer on top of the classic 
 
 - `report draft` – space acts as `AND`, so you only see files whose names contain both tokens.
 - `*.pdf briefing` – filter to PDF results whose names include “briefing”.
+- `*.zip size:>100MB` – search for ZIP files larger than 100MB.
 - `infolder:/Users demo!.psd` – restrict the search root to `/Users`, then search for files whose names contain `demo` but exclude `.psd`.
 - `"Application Support"` – quote exact phrases.
 - `brary/Applicat` – use `/` as a path separator for sub-path searching, matching directories like `Library/Application Support`.
