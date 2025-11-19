@@ -9,8 +9,9 @@ use background::{
 };
 use cardinal_sdk::EventWatcher;
 use commands::{
-    SearchJob, SearchState, get_app_status, get_nodes_info, open_in_finder, preview_with_quicklook,
-    request_app_exit, search, start_logic, trigger_rescan, update_icon_viewport,
+    SearchJob, SearchState, get_app_status, get_nodes_info, hide_main_window, open_in_finder,
+    preview_with_quicklook, request_app_exit, search, start_logic, toggle_main_window,
+    trigger_rescan, update_icon_viewport,
 };
 use crossbeam_channel::{Receiver, RecvTimeoutError, Sender, bounded, unbounded};
 use lifecycle::{
@@ -27,10 +28,9 @@ use std::{
     time::Duration,
 };
 use tauri::{Emitter, Manager, RunEvent, WindowEvent};
-use tauri_plugin_global_shortcut::ShortcutState;
 use tracing::{info, level_filters::LevelFilter, warn};
 use tracing_subscriber::EnvFilter;
-use window_controls::{WindowToggle, activate_window, hide_window, toggle_window};
+use window_controls::{activate_window, hide_window};
 
 static CACHE_PATH: LazyLock<PathBuf> = LazyLock::new(|| {
     directories::ProjectDirs::from("", "", "Cardinal")
@@ -41,7 +41,6 @@ static CACHE_PATH: LazyLock<PathBuf> = LazyLock::new(|| {
         .config_dir()
         .join("cardinal.db")
 });
-const QUICK_LAUNCH_SHORTCUT: &str = "CmdOrCtrl+Shift+Space";
 pub(crate) static LOGIC_START: OnceCell<Sender<()>> = OnceCell::new();
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -66,23 +65,6 @@ pub fn run() -> Result<()> {
         .set(logic_start_tx)
         .expect("LOGIC_START channel already initialized");
 
-    let quick_launch_shortcut_plugin = tauri_plugin_global_shortcut::Builder::new()
-        .with_shortcut(QUICK_LAUNCH_SHORTCUT)
-        .expect("invalid quick launch shortcut definition")
-        .with_handler(|app, _shortcut, event| {
-            if event.state == ShortcutState::Pressed {
-                let Some(window) = app.get_webview_window("main") else {
-                    warn!("Toggle requested but main window is unavailable");
-                    return;
-                };
-
-                if matches!(toggle_window(&window), WindowToggle::Hidden) {
-                    info!("Global shortcut hid the Cardinal window");
-                }
-            }
-        })
-        .build();
-
     let mut builder = tauri::Builder::default();
     #[cfg(not(feature = "dev"))]
     {
@@ -90,9 +72,9 @@ pub fn run() -> Result<()> {
     }
     builder = builder
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_macos_permissions::init())
         .plugin(tauri_plugin_window_state::Builder::new().build())
-        .plugin(quick_launch_shortcut_plugin)
         .on_window_event(|window, event| {
             if window.label() != "main" {
                 return;
@@ -136,7 +118,9 @@ pub fn run() -> Result<()> {
             open_in_finder,
             preview_with_quicklook,
             request_app_exit,
-            start_logic
+            start_logic,
+            hide_main_window,
+            toggle_main_window,
         ])
         .build(tauri::generate_context!())
         .expect("error while running tauri application");

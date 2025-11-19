@@ -3,10 +3,12 @@ import ReactDOM from 'react-dom/client';
 import './i18n/config';
 import App from './App';
 import { initializeTray } from './tray';
+import { initializeGlobalShortcuts } from './utils/globalShortcuts';
 import { initializeThemePreference } from './theme';
 
 initializeThemePreference();
 void initializeTray();
+void initializeGlobalShortcuts();
 
 const rootElement = document.getElementById('root');
 

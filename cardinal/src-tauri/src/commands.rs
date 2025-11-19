@@ -1,6 +1,7 @@
 use crate::{
     LOGIC_START,
     lifecycle::{EXIT_REQUESTED, load_app_state},
+    window_controls::{WindowToggle, hide_window, toggle_window},
 };
 use anyhow::Result;
 use base64::{Engine as _, engine::general_purpose};
@@ -9,8 +10,8 @@ use search_cache::{SearchOptions, SearchOutcome, SearchResultNode, SlabIndex, Sl
 use search_cancel::CancellationToken;
 use serde::{Deserialize, Serialize};
 use std::{process::Command, sync::atomic::Ordering};
-use tauri::{AppHandle, State};
-use tracing::info;
+use tauri::{AppHandle, Manager, State};
+use tracing::{info, warn};
 
 #[derive(Debug, Clone, Copy, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
@@ -233,5 +234,27 @@ pub fn request_app_exit(app_handle: AppHandle) -> Result<(), String> {
 pub fn start_logic() {
     if let Some(sender) = LOGIC_START.get() {
         let _ = sender.send(());
+    }
+}
+
+#[tauri::command]
+pub fn hide_main_window(app: AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        if hide_window(&window) {
+            info!("Main window hidden via command");
+        }
+    }
+}
+
+#[tauri::command]
+pub fn toggle_main_window(app: AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        if matches!(toggle_window(&window), WindowToggle::Hidden) {
+            info!("Main window hidden via command");
+        } else {
+            info!("Main window shown via command");
+        }
+    } else {
+        warn!("Toggle requested but main window is unavailable");
     }
 }
