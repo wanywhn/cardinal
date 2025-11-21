@@ -1,6 +1,6 @@
 import { defaultWindowIcon } from '@tauri-apps/api/app';
 import { invoke } from '@tauri-apps/api/core';
-import { Menu } from '@tauri-apps/api/menu';
+import { Menu, MenuItem, PredefinedMenuItem } from '@tauri-apps/api/menu';
 import { TrayIcon, type TrayIconEvent, type TrayIconOptions } from '@tauri-apps/api/tray';
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 import i18n from './i18n/config';
@@ -39,16 +39,7 @@ async function createTray(): Promise<void> {
 
 async function buildTrayMenu(): Promise<Menu> {
   return Menu.new({
-    items: [
-      {
-        id: TRAY_MENU_QUIT_ID,
-        text: i18n.t('tray.quit', { defaultValue: 'Quit Cardinal' }),
-        accelerator: 'CmdOrCtrl+Q',
-        action: () => {
-          void handleQuitCardinal();
-        },
-      },
-    ],
+    items: [await PredefinedMenuItem.new({ item: "Quit"})],
   });
 }
 
