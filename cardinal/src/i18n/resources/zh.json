@@ -86,6 +86,7 @@
     "preferences": "偏好设置",
     "hide": "隐藏",
     "quit": "退出 {{appName}}",
+    "edit": "编辑",
     "help": "帮助",
     "getUpdates": "获取更新"
   },

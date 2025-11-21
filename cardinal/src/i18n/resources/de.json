@@ -87,6 +87,7 @@
     "preferences": "Einstellungen",
     "hide": "Ausblenden",
     "quit": "{{appName}} beenden",
+    "edit": "Bearbeiten",
     "help": "Hilfe",
     "getUpdates": "Updates abrufen"
   },

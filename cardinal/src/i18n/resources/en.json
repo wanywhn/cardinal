@@ -87,6 +87,7 @@
     "preferences": "Preferences",
     "hide": "Hide",
     "quit": "Quit {{appName}}",
+    "edit": "Edit",
     "help": "Help",
     "getUpdates": "Get Updates"
   },

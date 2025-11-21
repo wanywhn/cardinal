@@ -55,6 +55,20 @@ async function buildAppMenu(): Promise<void> {
     ],
   });
 
+  const editSubmenu = await Submenu.new({
+    id: 'menu.edit',
+    text: i18n.t('menu.edit'),
+    items: [
+      await PredefinedMenuItem.new({ item: 'Undo' }),
+      await PredefinedMenuItem.new({ item: 'Redo' }),
+      await PredefinedMenuItem.new({ item: 'Separator' }),
+      await PredefinedMenuItem.new({ item: 'Cut' }),
+      await PredefinedMenuItem.new({ item: 'Copy' }),
+      await PredefinedMenuItem.new({ item: 'Paste' }),
+      await PredefinedMenuItem.new({ item: 'SelectAll' }),
+    ],
+  });
+
   const getUpdatesItem = await MenuItem.new({
     id: 'menu.help_updates',
     text: i18n.t('menu.getUpdates'),
@@ -69,7 +83,7 @@ async function buildAppMenu(): Promise<void> {
   await helpSubmenu.setAsHelpMenuForNSApp().catch(() => {});
 
   const menu = await Menu.new({
-    items: [appSubmenu, helpSubmenu],
+    items: [appSubmenu, editSubmenu, helpSubmenu],
   });
   await menu.setAsAppMenu();
 }

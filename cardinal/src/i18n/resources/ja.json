@@ -87,6 +87,7 @@
     "preferences": "環境設定",
     "hide": "非表示",
     "quit": "{{appName}} を終了",
+    "edit": "編集",
     "help": "ヘルプ",
     "getUpdates": "アップデートを入手"
   },
