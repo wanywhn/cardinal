@@ -1,7 +1,7 @@
 use crate::{
     LOGIC_START,
     lifecycle::{EXIT_REQUESTED, load_app_state},
-    window_controls::{WindowToggle, hide_window, toggle_window},
+    window_controls::{WindowToggle, activate_window, hide_window, toggle_window},
 };
 use anyhow::Result;
 use base64::{Engine as _, engine::general_purpose};
@@ -243,6 +243,16 @@ pub fn hide_main_window(app: AppHandle) {
         if hide_window(&window) {
             info!("Main window hidden via command");
         }
+    }
+}
+
+#[tauri::command]
+pub fn activate_main_window(app: AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        activate_window(&window);
+        info!("Main window activated via command");
+    } else {
+        warn!("Activate requested but main window is unavailable");
     }
 }
 

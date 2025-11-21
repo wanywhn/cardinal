@@ -9,9 +9,9 @@ use background::{
 };
 use cardinal_sdk::EventWatcher;
 use commands::{
-    SearchJob, SearchState, get_app_status, get_nodes_info, hide_main_window, open_in_finder,
-    preview_with_quicklook, request_app_exit, search, start_logic, toggle_main_window,
-    trigger_rescan, update_icon_viewport,
+    SearchJob, SearchState, activate_main_window, get_app_status, get_nodes_info, hide_main_window,
+    open_in_finder, preview_with_quicklook, request_app_exit, search, start_logic,
+    toggle_main_window, trigger_rescan, update_icon_viewport,
 };
 use crossbeam_channel::{Receiver, RecvTimeoutError, Sender, bounded, unbounded};
 use lifecycle::{
@@ -120,6 +120,7 @@ pub fn run() -> Result<()> {
             request_app_exit,
             start_logic,
             hide_main_window,
+            activate_main_window,
             toggle_main_window,
         ])
         .build(tauri::generate_context!())
