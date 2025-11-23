@@ -9,12 +9,12 @@ import React, {
   forwardRef,
   useImperativeHandle,
 } from 'react';
-import { invoke } from '@tauri-apps/api/core';
 import type { CSSProperties, UIEvent as ReactUIEvent } from 'react';
 import Scrollbar from './Scrollbar';
 import { useDataLoader } from '../hooks/useDataLoader';
 import type { SearchResultItem } from '../types/search';
 import type { SlabIndex } from '../types/slab';
+import { useIconViewport } from '../hooks/useIconViewport';
 
 export type VirtualListHandle = {
   scrollToTop: () => void;
@@ -43,7 +43,6 @@ export const VirtualList = forwardRef<VirtualListHandle, VirtualListProps>(funct
 ) {
   // ----- refs -----
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const iconRequestIdRef = useRef(0);
 
   // ----- state -----
   const [scrollTop, setScrollTop] = useState(0);
@@ -69,6 +68,7 @@ export const VirtualList = forwardRef<VirtualListHandle, VirtualListProps>(funct
     rowCount && viewportHeight
       ? Math.min(rowCount - 1, Math.ceil((scrollTop + viewportHeight) / rowHeight) + overscan - 1)
       : -1;
+  useIconViewport({ results: resultsList, start, end });
 
   // Clamp scroll updates so callers cannot push the viewport outside legal bounds
   const updateScrollAndRange = useCallback(
@@ -109,44 +109,10 @@ export const VirtualList = forwardRef<VirtualListHandle, VirtualListProps>(funct
   );
 
   // ----- effects -----
-  const updateIconViewport = useCallback((viewport: SlabIndex[]) => {
-    const requestId = iconRequestIdRef.current + 1;
-    iconRequestIdRef.current = requestId;
-    // Notify the backend which rows are visible so icon thumbnails can stream lazily
-    invoke('update_icon_viewport', { id: requestId, viewport }).catch((error) => {
-      console.error('Failed to update icon viewport', error);
-    });
-  }, []);
-
   // Ensure the data cache stays warm for the active window
   useEffect(() => {
     if (end >= start) ensureRangeLoaded(start, end);
   }, [start, end, ensureRangeLoaded]);
-
-  useEffect(() => {
-    if (resultsList.length === 0 || end < start) {
-      updateIconViewport([]);
-      return;
-    }
-
-    const clampedStart = Math.max(0, start);
-    const clampedEnd = Math.min(end, resultsList.length - 1);
-    if (clampedEnd < clampedStart) {
-      updateIconViewport([]);
-      return;
-    }
-
-    const viewport = resultsList.slice(clampedStart, clampedEnd + 1);
-
-    updateIconViewport(viewport);
-  }, [resultsList, start, end, updateIconViewport]);
-
-  useEffect(
-    () => () => {
-      updateIconViewport([]);
-    },
-    [updateIconViewport],
-  );
 
   // Track container height changes so virtualization recalculates the viewport
   useLayoutEffect(() => {
