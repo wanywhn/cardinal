@@ -41,24 +41,24 @@ const ThemeSwitcher = ({ className }: ThemeSwitcherProps): React.JSX.Element => 
     THEME_OPTIONS.find((option) => option.value === preference) ?? THEME_OPTIONS[0];
 
   return (
-    <label className={`theme-switcher ${className ?? ''}`}>
+    <div className={className}>
       <span className="sr-only">{t('theme.label')}</span>
-      <span className="theme-switcher__display" aria-hidden="true">
-        {activeOption.icon}
-      </span>
-      <select
-        className="theme-switcher__select"
-        value={preference}
-        onChange={handleChange}
-        aria-label={t('theme.label')}
-      >
-        {THEME_OPTIONS.map((option) => (
-          <option key={option.value} value={option.value}>
-            {t(option.labelKey)}
-          </option>
-        ))}
-      </select>
-    </label>
+      <div className="theme-switcher">
+        <span className="theme-switcher__icon">{activeOption.icon}</span>
+        <select
+          className="theme-switcher__select"
+          value={preference}
+          onChange={handleChange}
+          aria-label={t('theme.label')}
+        >
+          {THEME_OPTIONS.map((option) => (
+            <option key={option.value} value={option.value}>
+              {t(option.labelKey)}
+            </option>
+          ))}
+        </select>
+      </div>
+    </div>
   );
 };
 

@@ -48,43 +48,19 @@ export function PreferencesOverlay({
     >
       <div className="preferences-card">
         <header className="preferences-card__header">
-          <div>
-            <p className="preferences-card__eyebrow">{t('preferences.title')}</p>
-            <h1 className="preferences-card__title">{t('preferences.heading')}</h1>
-            <p className="preferences-card__subtitle">{t('preferences.subtitle')}</p>
-          </div>
-          <button
-            type="button"
-            className="preferences-close"
-            aria-label={t('preferences.close')}
-            onClick={onClose}
-          >
-            ×
-          </button>
+          <h1 className="preferences-card__title">{t('preferences.title')}</h1>
         </header>
 
         <div className="preferences-section">
           <div className="preferences-row">
-            <div>
-              <p className="preferences-label">{t('preferences.appearance')}</p>
-              <p className="preferences-hint">{t('preferences.themeHint')}</p>
-            </div>
+            <p className="preferences-label">{t('preferences.appearance')}</p>
             <ThemeSwitcher className="preferences-control" />
           </div>
           <div className="preferences-row">
-            <div>
-              <p className="preferences-label">{t('preferences.language')}</p>
-              <p className="preferences-hint">{t('preferences.languageHint')}</p>
-            </div>
+            <p className="preferences-label">{t('preferences.language')}</p>
             <LanguageSwitcher className="preferences-control" />
           </div>
         </div>
-
-        <footer className="preferences-footer">
-          <button type="button" onClick={onClose}>
-            {t('preferences.close')}
-          </button>
-        </footer>
       </div>
     </div>
   );
