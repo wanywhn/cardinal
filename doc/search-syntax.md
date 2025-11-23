@@ -1,82 +1,299 @@
-# Cardinal Search Syntax Reference
+# Cardinal Search Syntax
 
-> Cardinal adopts an Everything-compatible query syntax that layers boolean logic, grouping, regex, folder scoping, and extension filters on top of the familiar substring search. Start with the README quick queries, then keep this page handy when you need the subset the engine executes today.
+Cardinal’s query language is intentionally close to Everything’s syntax, while reflecting what the current engine actually implements. This page is the ground‑truth reference for what the Rust backend understands today.
 
-## Quick Start
+---
 
-- `report draft` — space means `AND`, so results must contain both tokens anywhere in the path.
-- `ext:pdf briefing` — limit to PDF files whose names include “briefing”; Unicode text works out of the box.
-- `Pictures vacation` — mix directory fragments and filename fragments freely.
-- `parent:/Users demo!.psd` — stay under `/Users` and exclude `.psd` items.
-- `regex:^Report.*2025$` — use regular expressions for structured name matches.
-- `ext:png;jpg travel|vacation` — search multiple extensions with an `OR` clause.
+## 1. Mental model
 
-Jump to [Examples](#examples) for a longer list that mirrors our regression tests.
+- Every query is parsed into a tree of:
+  - **Words / phrases** (plain text, quoted strings, wildcards),
+  - **Filters** (`ext:`, `type:`, `dm:`, `content:`, …),
+  - **Boolean operators** (`AND`, `OR`, `NOT` / `!`).
+- Matching runs against the **full path** of every indexed file, not just the basename.
+- Case sensitivity is controlled by the UI toggle:
+  - When **case-insensitive**, the engine lowercases both query and candidates for name/content matching.
+  - When **case-sensitive**, the engine compares bytes as‑is.
 
-## Tokens & Wildcards
+Quick examples:
+```text
+report draft                  # files whose path contains both “report” and “draft”
+ext:pdf briefing              # PDF files whose name contains “briefing”
+parent:/Users demo!.psd       # under /Users, exclude .psd files
+regex:^Report.*2025$          # names matching a regex
+ext:png;jpg travel|vacation   # PNG or JPG whose names contain “travel” or “vacation”
+```
 
-- Plain text performs **substring** matches in a case-insensitive way. Flip the UI toggle whenever you need case-sensitive evaluation.
-- `*` matches zero or more characters and `?` matches exactly one; the pattern must cover the full token, so `*.rs` or `foo??.txt` act on entire filenames. Pair with `parent:` / `infolder:` when you want to constrain the directory scope.
-- Use wildcards mid-token for fuzzy spans: `a*b` finds anything starting with `a` and ending with `b`, while `report-??.txt` captures numbered variants. Quote a token (e.g., `"*.rs"`) when you need literal `*` or `?`.
-- Wrap phrases or literal paths with spaces in double quotes: `"summer holiday"`, `"/Applications/Cardinal.app"`.
+---
 
-## Boolean Logic & Grouping
+## 2. Tokens, wildcards, and path segments
 
-| Syntax      | Meaning                                                                 |
-| ----------- | ----------------------------------------------------------------------- |
-| `foo bar`   | Space = `AND`; both tokens are required.                                |
-| `foo|bar`   | `OR`, can also be written `foo OR bar`.                                 |
-| `!temp`     | `NOT`, also available as `NOT temp`.                                    |
-| `<...>`     | Angle-bracket grouping, matching Everything’s default syntax.           |
-| `( ... )`   | Parentheses are also allowed for people who prefer them.                |
+### 2.1 Plain tokens and phrases
 
-NOT > OR > AND, so group expressions (e.g., `good (*.mp3|*.wav)`) any time you want a different order.
+- An unquoted token is a **substring match** on the path:
+  - `demo` matches `/Users/demo/Projects/cardinal.md`.
+- Double‑quoted phrases match the exact sequence including spaces:
+  - `"Application Support"` matches `/Library/Application Support/...`.
+- The UI case‑sensitivity toggle applies to both.
 
-## Filter Cheat Sheet
+### 2.2 Wildcards (`*` and `?`)
 
-| Filter              | Description & sample usage                                                                 |
-| ------------------- | ------------------------------------------------------------------------------------------ |
-| `file:` / `folder:` | Restrict the result kind, e.g. `folder: Projects` or `file: notes`.                        |
-| `ext:`              | Accept a semicolon-separated extension list: `ext:jpg;png;gif`.                            |
-| `parent:`           | Show only direct children of a directory: `parent:/Users/demo/Documents`.                  |
-| `infolder:`         | Walk a directory recursively: `infolder:/Users/demo/Projects report`.                      |
-| `nosubfolders:`     | Return only the files directly under a folder (no subfolders): `nosubfolders:/Users/demo/Projects`. |
-| `type:`             | Category filters such as `type:picture`, `type:video`, `type:doc`, `type:archive`, etc.    |
-| `audio:` / `video:` / `doc:` / `exe:` | Shorthand macros equivalent to `type:audio`, `type:video`, etc.          |
-| `size:`             | Filter by file size with comparisons (`size:>1GB`), ranges (`size:1mb..10mb`), or keywords (`size:tiny`). |
-| `dm:` / `dc:`       | Date modified/created filters with keywords (`dm:today`, `dc:thisweek`) or ranges (`dm:2024/01/01-2024/12/31`). |
-| `regex:`            | Regular expressions (`regex:^README\..*`).                                                 |
-| `content:`          | Scan file contents for a plain substring: `*.md content:\"Bearer \"`, `*.rs content:TODO`, `ext:md content:\"API key\"`.|
+- `*` matches zero or more characters.
+- `?` matches exactly one character.
+- Wildcards are understood **within a single token**:
+  - `*.rs` — any name ending with `.rs`.
+  - `report-??.txt` — `report-01.txt`, `report-AB.txt`, etc.
+  - `a*b` — names starting with `a` and ending with `b`.
+- If you need literal `*` or `?`, quote the token: `"*.rs"`.
 
-Keywords such as `today`, `yesterday`, `thisweek`, `lastweek`, `thismonth`, `lastmonth`, `thisyear`, `lastyear`, `pastweek`, `pastmonth`, and `pastyear` work inside `dm:` / `dc:` filters, and you can combine them with comparison operators (`dm:>=2024-01-01`) or explicit ranges.
+### 2.3 Path‑style segmentation with `/`
 
-## Additional Notes
-
-- Boolean expressions still understand parentheses and angle brackets: group segments like `<src|tests> ext:rs`.
-- Use `!` to subtract results: `parent:/Users/demo/Documents !ext:pdf`.
-- Paths and escaped terms share the same syntax as in Everything, so snippets from existing docs typically paste right in.
-
-## Content Filter
-
-- Use `content:<text>` to return files whose contents include the given substring: `*.md content:"Bearer "`, `ext:md content:"API key"`.
-- Case sensitivity follows the UI toggle. When case-insensitive, the engine lowercases the needle and the scanned bytes; when case-sensitive it leaves bytes untouched.
-- The match is a raw substring search (no regex inside `content:`) across the whole file; multi-byte sequences can span read boundaries.
-- Combine with other filters to narrow scope (`infolder:/Users/demo Projects content:deadline`, `type:doc content:"Q4 budget"`). Empty needles are rejected.
-
-## Examples
+Cardinal understands “slash‑segments” inside a token and classifies each segment as a prefix/suffix/exact/substring match on path components. Examples:
 
 ```text
-parent:/Users/demo/Documents ext:md
+elloworl        → Substring("elloworl")
+/root           → Prefix("root")
+root/           → Suffix("root")
+/root/          → Exact("root")
+/root/bar       → Exact("root"), Prefix("bar")
+/root/bar/kksk  → Exact("root"), Exact("bar"), Prefix("kksk")
+foo/bar/kks     → Suffix("foo"), Exact("bar"), Prefix("kks")
+gaea/lil/bee/   → Suffix("gaea"), Exact("lil"), Exact("bee")
+bab/bob/        → Suffix("bab"), Exact("bob")
+/byb/huh/good/  → Exact("byb"), Exact("huh"), Exact("good")
+```
+
+This lets you express:
+- “Folder must end with X” (`foo/`),
+- “Folder must start with X” (`/foo`),
+- “Exact folder name in the middle of the path” (`gaea/lil/bee/`).
+
+---
+
+## 3. Boolean logic and grouping
+
+Cardinal follows Everything’s precedence:
+
+- `NOT` / `!` binds tightest,
+- `OR` / `|` next,
+- implicit / explicit `AND` (“space”) has the **lowest** precedence.
+
+### 3.1 Operators
+
+| Syntax         | Meaning                                               |
+| -------------- | ----------------------------------------------------- |
+| `foo bar`      | `foo AND bar` — both tokens must match.              |
+| `foo\|bar`      | `foo OR bar` — either can match.                     |
+| `foo OR bar`   | Word form of `|`.                                    |
+| `!temp`        | `NOT temp` — exclude matches.                        |
+| `NOT temp`     | Same as `!temp`.                                     |
+| `( ... )`      | Grouping with parentheses.                           |
+| `< ... >`      | Grouping with angle brackets (Everything-style).     |
+
+Precedence examples:
+```text
+foo bar|baz        # parsed as foo AND (bar OR baz)
+!(ext:zip report)  # exclude items where both ext:zip AND “report” match
+good (<src|tests> ext:rs)
+                   # good AND ((src OR tests) AND ext:rs)
+```
+
+Use parentheses or `<...>` any time you want to override the default precedence.
+
+---
+
+## 4. Filters
+
+This section only lists filters that the current engine actually evaluates.
+
+### 4.1 File / folder filters
+
+| Filter              | Meaning                                       | Example                                |
+| ------------------- | --------------------------------------------- | -------------------------------------- |
+| `file:`             | Only files (not folders)                      | `file: report`                         |
+| `folder:`           | Only folders                                  | `folder:Projects`                      |
+
+These can be combined with other terms:
+
+```text
+folder:Pictures vacation
+file: invoice dm:pastyear
+```
+
+### 4.2 Extension filter: `ext:`
+
+- `ext:` accepts one or more extensions separated by `;`:
+  - `ext:jpg` — JPEG images.
+  - `ext:jpg;png;gif` — common web image types.
+- Matching is case-insensitive and does not include the dot.
+
+Examples:
+```text
+ext:md content:"TODO"
 ext:pdf briefing parent:/Users/demo/Reports
 ext:png;jpg travel|vacation
-parent:/Users/demo/Documents !ext:pdf
-infolder:/Users/demo/Projects report draft
-parent:/Users/demo/Scripts *.sh
-infolder:/Users/demo/Logs error-??.log
-*.psd !parent:/Users/demo/Archive
-"Application Support"
-regex:^README\\.md$ parent:/Users/demo
-Pictures vacation
-D:\Projects\cardinal src|docs
-parent:/Users demo!.psd
 ```
+
+### 4.3 Folder scope: `parent:`, `infolder:`, `nosubfolders:`
+
+| Filter          | Meaning                                                   | Example                                           |
+| --------------- | --------------------------------------------------------- | ------------------------------------------------- |
+| `parent:`       | Direct children of the given folder only                  | `parent:/Users/demo/Documents ext:md`            |
+| `infolder:`     | Any descendant of the given folder (recursive)           | `infolder:/Users/demo/Projects report draft`     |
+| `nosubfolders:` | Files in a folder but not in any of its subfolders       | `nosubfolders:/Users/demo/Projects ext:log`      |
+
+These filters take an absolute path as their argument.
+
+### 4.4 Type filter: `type:`
+
+`type:` groups file extensions into semantic categories. Supported categories (case-insensitive, with synonyms) include:
+
+- Pictures: `type:picture`, `type:pictures`, `type:image`, `type:images`, `type:photo`, `type:photos`
+- Video: `type:video`, `type:videos`, `type:movie`, `type:movies`
+- Audio: `type:audio`, `type:audios`, `type:music`, `type:song`, `type:songs`
+- Documents: `type:doc`, `type:docs`, `type:document`, `type:documents`, `type:text`, `type:office`
+- Presentations: `type:presentation`, `type:presentations`, `type:ppt`, `type:slides`
+- Spreadsheets: `type:spreadsheet`, `type:spreadsheets`, `type:xls`, `type:excel`, `type:sheet`, `type:sheets`
+- PDF: `type:pdf`
+- Archives: `type:archive`, `type:archives`, `type:compressed`, `type:zip`
+- Code: `type:code`, `type:source`, `type:dev`
+- Executables: `type:exe`, `type:exec`, `type:executable`, `type:executables`, `type:program`, `type:programs`, `type:app`, `type:apps`
+
+Examples:
+```text
+type:picture vacation
+type:code "Cardinal"
+type:archive dm:pastmonth
+```
+
+### 4.5 Type macros: `audio:`, `video:`, `doc:`, `exe:`
+
+Shortcuts for common `type:` cases:
+
+| Macro    | Equivalent to                     | Example                 |
+| -------- | --------------------------------- | ----------------------- |
+| `audio:` | `type:audio`                      | `audio: piano`          |
+| `video:` | `type:video`                      | `video: tutorial`       |
+| `doc:`   | `type:doc`                        | `doc: invoice dm:2024`  |
+| `exe:`   | `type:exe`                        | `exe: "Cardinal"`       |
+
+Macros accept an optional argument:
+```text
+audio:soundtrack
+video:"Keynote"
+```
+
+### 4.6 Size filter: `size:`
+
+`size:` supports:
+
+- **Comparisons**: `>`, `>=`, `<`, `<=`, `=`, `!=`
+- **Ranges**: `min..max`
+- **Keywords**: `empty`, `tiny`, `small`, `medium`, `large`, `huge`, `gigantic`, `giant`
+- **Units**: bytes (`b`), kilobytes (`k`, `kb`, `kib`, `kilobyte[s]`), megabytes (`m`, `mb`, `mib`, `megabyte[s]`), gigabytes (`g`, `gb`, `gib`, `gigabyte[s]`), terabytes (`t`, `tb`, `tib`, `terabyte[s]`), petabytes (`p`, `pb`, `pib`, `petabyte[s]`).
+
+Examples:
+```text
+size:>1GB                 # larger than 1 GB
+size:1mb..10mb            # between 1 MB and 10 MB
+size:tiny                 # 0–10 KB (approximate keyword range)
+size:empty                # exactly 0 bytes
+```
+
+### 4.7 Date filters: `dm:`, `dc:`
+
+- `dm:` — date modified.
+- `dc:` — date created.
+
+They accept:
+
+1. **Keywords** (relative ranges):
+   - `today`, `yesterday`
+   - `thisweek`, `lastweek`
+   - `thismonth`, `lastmonth`
+   - `thisyear`, `lastyear`
+   - `pastweek`, `pastmonth`, `pastyear`
+
+2. **Absolute dates**:
+   - `YYYY-MM-DD`, `YYYY/MM/DD`, `YYYY.MM.DD`
+   - Also supports common day‑first / month‑first layouts like `DD-MM-YYYY` and `MM/DD/YYYY`.
+
+3. **Ranges and comparisons**:
+   - Ranges: `dm:2024-01-01..2024-12-31`
+   - Comparisons: `dm:>=2024-01-01`, `dc:<2023/01/01`
+
+Examples:
+```text
+dm:today                      # changed today
+dc:lastyear                   # created last calendar year
+dm:2024-01-01..2024-03-31     # modified in Q1 2024
+dm:>=2024/01/01               # modified from 2024-01-01 onwards
+```
+
+### 4.8 Regex filter: `regex:`
+
+`regex:` treats the rest of the token as a regular expression applied to the filename (within the path). It uses Rust’s `regex` engine.
+
+Examples:
+```text
+regex:^README\\.md$ parent:/Users/demo
+regex:Report.*2025
+```
+
+The UI case-sensitivity toggle affects regex matching.
+
+### 4.9 Content filter: `content:`
+
+`content:` scans file contents for a **plain substring**:
+
+- No regex inside `content:` — it is a byte substring match.
+- Case-sensitivity follows the UI toggle:
+  - In case-insensitive mode, the needle and scanned bytes are lowercased.
+  - In case-sensitive mode, bytes are compared as-is.
+- Very small needles are allowed, but `""` (empty) is rejected.
+
+Examples:
+```text
+*.md content:"Bearer "
+ext:md content:"API key"
+infolder:/Users/demo/Projects content:deadline
+type:doc content:"Q4 budget"
+```
+
+Content matching is done in streaming fashion over the file; multi-byte sequences can span buffer boundaries.
+
+---
+
+## 5. Examples
+
+Some realistic combinations:
+
+```text
+#  Markdown notes in Documents (no PDFs)
+parent:/Users/demo/Documents ext:md
+parent:/Users/demo/Documents !ext:pdf
+
+#  PDFs in Reports mentioning “briefing”
+ext:pdf briefing parent:/Users/demo/Reports
+
+#  Pictures from vacations
+type:picture vacation
+ext:png;jpg travel|vacation
+
+#  Recent log files inside a project tree
+infolder:/Users/demo/Projects ext:log dm:pastweek
+
+#  Shell scripts directly under Scripts folder
+parent:/Users/demo/Scripts *.sh
+
+#  Everything with “Application Support” in the path
+"Application Support"
+
+#  Matching a specific filename via regex
+regex:^README\\.md$ parent:/Users/demo
+
+#  Exclude PSDs anywhere under /Users
+infolder:/Users demo!.psd
+```
+
+Use this page as the authoritative list of operators and filters that the engine implements today; additional Everything features (like access/run dates or attribute-based filters) are parsed at the syntax level but currently rejected during evaluation.
