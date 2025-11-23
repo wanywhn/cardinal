@@ -1019,8 +1019,11 @@ impl<'a> Parser<'a> {
         &mut self,
         kind: &FilterKind,
     ) -> Result<Option<FilterArgument>, ParseError> {
-        self.skip_ws();
         if self.eof() {
+            return Ok(None);
+        }
+
+        if self.peek_char().map_or(false, |ch| ch.is_whitespace()) {
             return Ok(None);
         }
 
@@ -1625,6 +1628,33 @@ mod tests {
         };
         assert_eq!(*op, ComparisonOp::Lte);
         assert_eq!(value, "4000");
+    }
+
+    #[test]
+    fn parses_file_filter_with_wildcard_and_date_keyword() {
+        let query = parse_query("file: *.md dm:pastyear").unwrap();
+        let Expr::And(parts) = query.expr else {
+            panic!("expected conjunction");
+        };
+        assert_eq!(parts.len(), 3);
+
+        let Expr::Term(Term::Filter(file_filter)) = &parts[0] else {
+            panic!("expected filter term");
+        };
+        assert!(matches!(file_filter.kind, FilterKind::File));
+        assert!(file_filter.argument.is_none());
+
+        assert_eq!(parts[1], word("*.md"));
+
+        let Expr::Term(Term::Filter(dm_filter)) = &parts[2] else {
+            panic!("expected dm: filter");
+        };
+        assert!(matches!(dm_filter.kind, FilterKind::DateModified));
+        let Some(argument) = dm_filter.argument.as_ref() else {
+            panic!("expected dm: argument");
+        };
+        assert_eq!(argument.raw, "pastyear");
+        assert!(matches!(argument.kind, ArgumentKind::Bare));
     }
 
     #[test]

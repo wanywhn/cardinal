@@ -106,6 +106,8 @@ Use parentheses or `<...>` any time you want to override the default precedence.
 
 This section only lists filters that the current engine actually evaluates.
 
+> **Note**: filter arguments must follow the colon immediately (`ext:jpg`, `parent:/Users/demo`). Writing `file: *.md` inserts whitespace, so Cardinal treats it as a `file:` filter (with no argument) followed by the separate token `*.md`.
+
 ### 4.1 File / folder filters
 
 | Filter              | Meaning                                       | Example                                |
