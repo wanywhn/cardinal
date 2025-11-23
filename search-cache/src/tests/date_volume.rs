@@ -8,6 +8,53 @@ use super::{
 };
 use jiff::{civil::Date, tz::TimeZone};
 
+/// Returns a timestamp that always falls within the previous calendar week.
+/// Mirrors the logic in `keyword_range("lastweek")` so the test stays stable
+/// regardless of the current weekday or timezone the suite runs under.
+fn stable_lastweek_timestamp() -> i64 {
+    let tz = TimeZone::system();
+    let today = Timestamp::now().to_zoned(tz.clone()).date();
+    let shift = i64::from(today.weekday().to_monday_zero_offset()) + 7;
+    let mut cursor = today;
+    for _ in 0..usize::try_from(shift).expect("non-negative shift") {
+        cursor = cursor.yesterday().expect("date stays in range");
+    }
+    // Walk a few days forward so we land safely inside the last-week window.
+    for _ in 0..3 {
+        cursor = cursor.tomorrow().expect("tomorrow exists");
+    }
+    tz.to_zoned(cursor.at(12, 0, 0, 0))
+        .expect("valid zoned instant")
+        .timestamp()
+        .as_second()
+}
+
+fn lastweek_bounds() -> (i64, i64) {
+    let tz = TimeZone::system();
+    let mut start = Timestamp::now().to_zoned(tz.clone()).date();
+    let shift = i64::from(start.weekday().to_monday_zero_offset()) + 7;
+    for _ in 0..usize::try_from(shift).expect("non-negative shift") {
+        start = start.yesterday().expect("date stays in range");
+    }
+    let mut end = start;
+    for _ in 0..6 {
+        end = end.tomorrow().expect("date stays in range");
+    }
+    let start_ts = tz
+        .to_zoned(start.at(0, 0, 0, 0))
+        .expect("valid zoned instant")
+        .timestamp()
+        .as_second();
+    let end_next = end.tomorrow().expect("can step to next day");
+    let end_ts = tz
+        .to_zoned(end_next.at(0, 0, 0, 0))
+        .expect("valid zoned instant")
+        .timestamp()
+        .as_second()
+        - 1;
+    (start_ts, end_ts)
+}
+
 // Segment 1 ----------------------------------------------------------------
 // Keyword coverage: today, yesterday, pastweek, pastmonth, pastyear, thisweek, lastweek.
 #[test]
@@ -129,9 +176,11 @@ fn segment_1_date_keyword_basic() {
     assert_eq!(pastyear_names, expected3);
 
     // thisweek vs lastweek synthetic: shift week_c to lastweek
-    let lastweek_ts = now - 8 * SECONDS_PER_DAY;
+    let lastweek_ts = stable_lastweek_timestamp();
     set_file_times(&mut cache, week_idx, lastweek_ts, lastweek_ts);
     println!("[seg1] updated week idx={week_idx:?} -> {lastweek_ts} (lastweek scenario)");
+    // Move yesterday_b out of the last-week window so dm:lastweek focuses on week_c.
+    set_file_times(&mut cache, yest_idx, now, now);
     let thisweek_hits = cache.search("dm:thisweek").unwrap();
     let thisweek_names = list_names(&cache, &thisweek_hits);
     println!("[seg1] dm:thisweek => {thisweek_names:?}");
@@ -140,6 +189,53 @@ fn segment_1_date_keyword_basic() {
     let lastweek_names = list_names(&cache, &lastweek_hits);
     println!("[seg1] dm:lastweek => {lastweek_names:?}");
     assert_eq!(lastweek_names, vec!["week_c.txt"]);
+}
+
+#[test]
+fn segment_1b_lastweek_calendar_regression() {
+    let tmp = TempDir::new("seg1_lastweek_regression").unwrap();
+    for name in [
+        "lastweek_edge.txt",
+        "lastweek_mid.txt",
+        "older_than_lastweek.txt",
+        "thisweek_file.txt",
+    ] {
+        fs::write(tmp.path().join(name), b"x").unwrap();
+    }
+    let mut cache = SearchCache::walk_fs(tmp.path().to_path_buf());
+    let edge_idx = cache.search("lastweek_edge.txt").unwrap()[0];
+    let mid_idx = cache.search("lastweek_mid.txt").unwrap()[0];
+    let older_idx = cache.search("older_than_lastweek.txt").unwrap()[0];
+    let thisweek_idx = cache.search("thisweek_file.txt").unwrap()[0];
+    let (lastweek_start, lastweek_end) = lastweek_bounds();
+    set_file_times(&mut cache, edge_idx, lastweek_start, lastweek_start);
+    set_file_times(
+        &mut cache,
+        mid_idx,
+        lastweek_start + 2 * SECONDS_PER_DAY,
+        lastweek_start + 2 * SECONDS_PER_DAY,
+    );
+    set_file_times(
+        &mut cache,
+        older_idx,
+        lastweek_start - 3 * SECONDS_PER_DAY,
+        lastweek_start - 3 * SECONDS_PER_DAY,
+    );
+    set_file_times(
+        &mut cache,
+        thisweek_idx,
+        lastweek_end + SECONDS_PER_DAY,
+        lastweek_end + SECONDS_PER_DAY,
+    );
+
+    let lastweek_hits = cache.search("dm:lastweek").unwrap();
+    let lastweek_names = list_names(&cache, &lastweek_hits);
+    assert_eq!(lastweek_names, vec!["lastweek_edge.txt", "lastweek_mid.txt"]);
+
+    let pastweek_hits = cache.search("dm:pastweek").unwrap();
+    let pastweek_names = list_names(&cache, &pastweek_hits);
+    assert!(pastweek_names.contains(&"thisweek_file.txt".to_string()));
+    assert!(!pastweek_names.contains(&"older_than_lastweek.txt".to_string()));
 }
 
 // Segment 2 ----------------------------------------------------------------
@@ -394,4 +490,65 @@ fn segment_10_stress_queries() {
         )
         .unwrap();
     assert!(outcome.nodes.unwrap().len() >= 50); // all 50 within range
+}
+
+// Segment 11 ----------------------------------------------------------------
+// Created-date keywords should honor creation times even when modified timestamps differ.
+#[test]
+fn segment_11_created_keyword_filters() {
+    let tmp = TempDir::new("seg11_created_keywords").unwrap();
+    for name in [
+        "created_today.txt",
+        "created_lastweek.txt",
+        "created_month.txt",
+        "created_old.txt",
+    ] {
+        fs::write(tmp.path().join(name), b"x").unwrap();
+    }
+    let mut cache = SearchCache::walk_fs(tmp.path().to_path_buf());
+    let today_idx = cache.search("created_today.txt").unwrap()[0];
+    let lastweek_idx = cache.search("created_lastweek.txt").unwrap()[0];
+    let month_idx = cache.search("created_month.txt").unwrap()[0];
+    let old_idx = cache.search("created_old.txt").unwrap()[0];
+    let now = Timestamp::now().as_second();
+    let (lastweek_start, lastweek_end) = lastweek_bounds();
+    let lastweek_mid = lastweek_start + (lastweek_end - lastweek_start) / 2;
+    set_file_times(&mut cache, today_idx, now, now);
+    set_file_times(&mut cache, lastweek_idx, lastweek_mid, now);
+    set_file_times(
+        &mut cache,
+        month_idx,
+        now - 20 * SECONDS_PER_DAY,
+        now,
+    );
+    set_file_times(
+        &mut cache,
+        old_idx,
+        now - 400 * SECONDS_PER_DAY,
+        now - 400 * SECONDS_PER_DAY,
+    );
+
+    let today_hits = cache.search("dc:today").unwrap();
+    let today_names = list_names(&cache, &today_hits);
+    assert_eq!(today_names, vec!["created_today.txt"]);
+
+    let lastweek_hits = cache.search("dc:lastweek").unwrap();
+    let lastweek_names = list_names(&cache, &lastweek_hits);
+    assert_eq!(lastweek_names, vec!["created_lastweek.txt"]);
+
+    let pastmonth_hits = cache.search("dc:pastmonth").unwrap();
+    let pastmonth_names = list_names(&cache, &pastmonth_hits);
+    let mut expected_month = vec!["created_lastweek.txt", "created_month.txt", "created_today.txt"];
+    expected_month.sort();
+    assert_eq!(pastmonth_names, expected_month);
+
+    let pastyear_hits = cache.search("dc:pastyear").unwrap();
+    let pastyear_names = list_names(&cache, &pastyear_hits);
+    let expected_year = expected_month.clone();
+    assert_eq!(pastyear_names, expected_year);
+
+    // Modified-based filter should ignore creation timestamps here.
+    let dm_lastweek_hits = cache.search("dm:lastweek").unwrap();
+    let dm_lastweek_names = list_names(&cache, &dm_lastweek_hits);
+    assert!(dm_lastweek_names.is_empty());
 }
