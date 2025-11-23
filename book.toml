@@ -1,0 +1,12 @@
+[book]
+title = "Cardinal Documentation"
+authors = ["Cardinal Contributors"]
+src = "doc"
+
+[build]
+build-dir = "target/book"
+
+[output.html]
+default-theme = "light"
+preferred-dark-theme = "navy"
+git-repository-url = "https://github.com/cardisoft/cardinal"

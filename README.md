@@ -15,7 +15,7 @@
 
 ### Download
 
-Grab the latest packaged builds from [GitHub Releases](https://github.com/ldm0/cardinal/releases/).
+Grab the latest packaged builds from [GitHub Releases](https://github.com/cardisoft/cardinal/releases/).
 
 ### i18n support
 
