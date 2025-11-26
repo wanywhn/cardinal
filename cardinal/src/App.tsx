@@ -26,6 +26,7 @@ import { useTranslation } from 'react-i18next';
 import { useFullDiskAccessPermission } from './hooks/useFullDiskAccessPermission';
 import { OPEN_PREFERENCES_EVENT } from './constants/appEvents';
 import { getAllPathsInRange } from './utils/selection';
+import type { DisplayState } from './components/StateDisplay';
 
 type ActiveTab = StatusTabKey;
 
@@ -471,7 +472,7 @@ function App() {
     [handleRowContextMenu, handleRowSelect, selectedPaths, caseSensitive, highlightTerms],
   );
 
-  const displayState: 'loading' | 'error' | 'empty' | 'results' = (() => {
+  const displayState: DisplayState = (() => {
     if (!initialFetchCompleted) return 'loading';
     if (showLoadingUI) return 'loading';
     if (searchError) return 'error';
@@ -538,7 +539,6 @@ function App() {
       <main className="container" aria-hidden={showFullDiskAccessOverlay || isPreferencesOpen}>
         <SearchBar
           inputRef={searchInputRef}
-          value={searchInputValue}
           placeholder={searchPlaceholder}
           onChange={onQueryChange}
           caseSensitive={caseSensitive}

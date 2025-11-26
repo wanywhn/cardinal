@@ -7,8 +7,10 @@ type StateProps = {
   message?: React.ReactNode;
 };
 
+export type DisplayState = 'loading' | 'error' | 'empty' | 'results';
+
 type StateDisplayProps = {
-  state: 'loading' | 'error' | 'empty' | 'results';
+  state: DisplayState;
   message?: string | null;
   query?: string;
 };

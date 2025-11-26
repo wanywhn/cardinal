@@ -2,7 +2,7 @@ import React from 'react';
 import type { CSSProperties, ReactNode } from 'react';
 import type { MouseEvent as ReactMouseEvent } from 'react';
 import { ColumnHeader } from './ColumnHeader';
-import { StateDisplay } from './StateDisplay';
+import { StateDisplay, type DisplayState } from './StateDisplay';
 import { VirtualList } from './VirtualList';
 import type { ColumnKey } from '../constants';
 import type { VirtualListHandle } from './VirtualList';
@@ -13,7 +13,7 @@ type FilesTabContentProps = {
   headerRef: React.RefObject<HTMLDivElement | null>;
   onResizeStart: (columnKey: ColumnKey) => (event: ReactMouseEvent<HTMLSpanElement>) => void;
   onHeaderContextMenu?: (event: ReactMouseEvent<HTMLDivElement>) => void;
-  displayState: 'loading' | 'error' | 'empty' | 'results';
+  displayState: DisplayState;
   searchErrorMessage: string | null;
   currentQuery: string;
   virtualListRef: React.RefObject<VirtualListHandle | null>;

@@ -3,7 +3,6 @@ import type { ChangeEvent } from 'react';
 
 type SearchBarProps = {
   inputRef: React.RefObject<HTMLInputElement | null>;
-  value: string;
   placeholder: string;
   onChange: (event: ChangeEvent<HTMLInputElement>) => void;
   caseSensitive: boolean;
@@ -13,7 +12,6 @@ type SearchBarProps = {
 
 export function SearchBar({
   inputRef,
-  value,
   placeholder,
   onChange,
   caseSensitive,
@@ -26,7 +24,6 @@ export function SearchBar({
         <input
           id="search-input"
           ref={inputRef}
-          value={value}
           onChange={onChange}
           placeholder={placeholder}
           spellCheck={false}
