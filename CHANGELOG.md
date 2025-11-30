@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.13 — 2025-12-01
+- 30% lower memory usage
+- Quick Look is now fully native, with multi-file previews, smoother animations, and better alignment with macOS expectations. Thanks for [@Denis Stoyanov](https://github.com/xgrommx) for the help!
+- Support `~` expansion in query path and filter
+- Fix the database path so cache files land in the correct app config directory.
+
 ## 0.1.12 — 2025-11-27
 - Allow double-clicking a result row to open the file immediately.
 - Support wildcards in multi-path-segment queries for more flexible searches.
@@ -42,3 +48,14 @@
 - Added keyboard shortcuts for Quick Look (Space), Finder reveal (Cmd+R), copy path (Cmd+C), and refocusing search (Cmd+F).
 - The search field auto-focuses after launch and whenever the quick-launch shortcut summons Cardinal.
 - i18n: add Ukrainian language support and translations
+
+## 0.1.2 — 2025-11-07
+- feat(shortcut&tray): support global shortcut to toggle cardinal by [@Binlogo](https://github.com/Binlogo)
+- feat(theme): implement theme switching functionality with user preferences
+- feat(context-menu): add “copy filename” option and update translations
+- feat(i18n): add Russian language support and translations
+
+## 0.1.1 — 2025-11-07
+- Fixes iCloud download triggered by thumbnail generation.
+
+## 0.1.0 — 2025-11-07
