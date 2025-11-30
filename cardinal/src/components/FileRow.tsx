@@ -9,15 +9,14 @@ type FileRowProps = {
   item?: SearchResultItem;
   rowIndex: number;
   style?: CSSProperties;
-  onContextMenu?: (event: ReactMouseEvent<HTMLDivElement>, path: string) => void;
+  onContextMenu?: (event: ReactMouseEvent<HTMLDivElement>, path: string, rowIndex: number) => void;
   onOpen?: (path: string) => void;
   onSelect?: (
-    path: string,
     rowIndex: number,
     options: { isShift: boolean; isMeta: boolean; isCtrl: boolean },
   ) => void;
   isSelected?: boolean;
-  selectedPaths?: Set<string>;
+  selectedPathsForDrag?: string[];
   caseInsensitive?: boolean;
   highlightTerms?: readonly string[];
 };
@@ -30,7 +29,7 @@ export const FileRow = memo(function FileRow({
   onOpen,
   onSelect,
   isSelected = false,
-  selectedPaths = new Set(),
+  selectedPathsForDrag = [],
   caseInsensitive,
   highlightTerms,
 }: FileRowProps): React.JSX.Element | null {
@@ -63,14 +62,14 @@ export const FileRow = memo(function FileRow({
 
   const handleContextMenu = (e: ReactMouseEvent<HTMLDivElement>) => {
     e.preventDefault();
-    if (path && onContextMenu) {
-      onContextMenu(e, path);
+    if (onContextMenu) {
+      onContextMenu(e, path ?? '', rowIndex);
     }
   };
 
   const handleMouseDown = (e: ReactMouseEvent<HTMLDivElement>) => {
-    if (!isSelected && path && onSelect && e.button === 0) {
-      onSelect(path, rowIndex, {
+    if (!isSelected && onSelect && e.button === 0) {
+      onSelect(rowIndex, {
         isShift: e.shiftKey,
         isMeta: e.metaKey,
         isCtrl: e.ctrlKey,
@@ -91,14 +90,15 @@ export const FileRow = memo(function FileRow({
         return;
       }
 
-      const isDraggingSelected = selectedPaths.has(path);
-      const pathsToDrag = isDraggingSelected ? Array.from(selectedPaths) : [path];
+      const isDraggingSelected = isSelected && selectedPathsForDrag.length > 0;
+      const pathsToDrag =
+        isDraggingSelected && selectedPathsForDrag.length > 0 ? selectedPathsForDrag : [path];
 
       e.dataTransfer.effectAllowed = 'copy';
       e.dataTransfer.setData('text/plain', pathsToDrag.join('\n'));
       void startNativeFileDrag({ paths: pathsToDrag, icon: item.icon });
     },
-    [item.icon, path, selectedPaths],
+    [isSelected, item.icon, path, selectedPathsForDrag],
   );
 
   const rowClassName = [
