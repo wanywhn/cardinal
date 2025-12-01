@@ -15,6 +15,7 @@ import { useContextMenu } from './hooks/useContextMenu';
 import { useFileSearch } from './hooks/useFileSearch';
 import { useEventColumnWidths } from './hooks/useEventColumnWidths';
 import { useRecentFSEvents } from './hooks/useRecentFSEvents';
+import { useRemoteSort } from './hooks/useRemoteSort';
 import { ROW_HEIGHT, OVERSCAN_ROW_COUNT } from './constants';
 import type { VirtualListHandle } from './components/VirtualList';
 import FSEventsPanel from './components/FSEventsPanel';
@@ -27,6 +28,7 @@ import { useTranslation } from 'react-i18next';
 import { useFullDiskAccessPermission } from './hooks/useFullDiskAccessPermission';
 import { OPEN_PREFERENCES_EVENT } from './constants/appEvents';
 import type { DisplayState } from './components/StateDisplay';
+import type { SlabIndex } from './types/slab';
 
 type ActiveTab = StatusTabKey;
 
@@ -73,6 +75,40 @@ const isEditableTarget = (target: EventTarget | null): boolean => {
 const QUICK_LOOK_KEYCODE_DOWN = 125;
 const QUICK_LOOK_KEYCODE_UP = 126;
 
+type SelectionSync = {
+  indices: number[];
+  activeIndex: number | null;
+  anchorIndex: number | null;
+};
+
+const remapSelection = (
+  selectedSlabs: readonly SlabIndex[],
+  displayed: readonly SlabIndex[],
+): SelectionSync => {
+  if (selectedSlabs.length === 0) {
+    return { indices: [], activeIndex: null, anchorIndex: null };
+  }
+
+  const slabSet = new Set(selectedSlabs);
+  const indices: number[] = [];
+  displayed.forEach((value, idx) => {
+    if (slabSet.has(value)) {
+      indices.push(idx);
+    }
+  });
+
+  if (indices.length === 0) {
+    return { indices: [], activeIndex: null, anchorIndex: null };
+  }
+
+  const lastIndex = indices[indices.length - 1];
+  return {
+    indices,
+    activeIndex: lastIndex,
+    anchorIndex: lastIndex,
+  };
+};
+
 function App() {
   const {
     state,
@@ -105,6 +141,7 @@ function App() {
   const [shiftAnchorIndex, setShiftAnchorIndex] = useState<number | null>(null);
   // Quick Look key events can arrive while React state is mid-update; keep an imperative ref in sync.
   const selectedIndicesRef = useRef(selectedIndices);
+  const selectedSlabIndicesRef = useRef<SlabIndex[]>([]);
   const [isWindowFocused, setIsWindowFocused] = useState<boolean>(() => {
     return document.hasFocus();
   });
@@ -119,7 +156,19 @@ function App() {
   const { filteredEvents, eventFilterQuery, setEventFilterQuery } = useRecentFSEvents({
     caseSensitive,
   });
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const {
+    sortState,
+    displayedResults,
+    sortThreshold,
+    setSortThreshold,
+    canSort,
+    isSorting,
+    sortDisabledTooltip,
+    sortButtonsDisabled,
+    handleSortToggle,
+  } = useRemoteSort(results, i18n.language, (limit) => t('sorting.disabled', { limit }));
+  const displayedResultsLength = displayedResults.length;
 
   const selectedPaths = useMemo(() => {
     const list = virtualListRef.current;
@@ -134,7 +183,7 @@ function App() {
       }
     });
     return paths;
-  }, [selectedIndices, results]);
+  }, [selectedIndices, displayedResults]);
 
   const handleRowSelect = useCallback(
     (rowIndex: number, options: { isShift: boolean; isMeta: boolean; isCtrl: boolean }) => {
@@ -302,13 +351,13 @@ function App() {
 
   const moveSelection = useCallback(
     (delta: 1 | -1) => {
-      if (activeTab !== 'files' || !results.length) {
+      if (activeTab !== 'files' || displayedResultsLength === 0) {
         return;
       }
 
-      const fallbackIndex = delta > 0 ? -1 : results.length;
+      const fallbackIndex = delta > 0 ? -1 : displayedResultsLength;
       const baseIndex = activeRowIndex ?? fallbackIndex;
-      const nextIndex = Math.min(Math.max(baseIndex + delta, 0), results.length - 1);
+      const nextIndex = Math.min(Math.max(baseIndex + delta, 0), displayedResultsLength - 1);
 
       if (nextIndex === activeRowIndex) {
         return;
@@ -323,7 +372,7 @@ function App() {
         });
       }
     },
-    [activeRowIndex, activeTab, handleRowSelect, results.length],
+    [activeRowIndex, activeTab, displayedResultsLength, handleRowSelect],
   );
 
   const {
@@ -413,6 +462,44 @@ function App() {
   useEffect(() => {
     selectedIndicesRef.current = selectedIndices;
   }, [selectedIndices]);
+
+  useEffect(() => {
+    const slabs: SlabIndex[] = [];
+    selectedIndices.forEach((index) => {
+      const slabIndex = displayedResults[index];
+      if (slabIndex != null) {
+        slabs.push(slabIndex);
+      }
+    });
+    selectedSlabIndicesRef.current = slabs;
+  }, [displayedResults, selectedIndices]);
+
+  useEffect(() => {
+    const { indices, activeIndex, anchorIndex } = remapSelection(
+      selectedSlabIndicesRef.current,
+      displayedResults,
+    );
+
+    const selectionChanged =
+      indices.length !== selectedIndices.length ||
+      indices.some((idx, i) => idx !== selectedIndices[i]);
+    const activeChanged = activeRowIndex !== activeIndex;
+    const anchorChanged = shiftAnchorIndex !== anchorIndex;
+
+    if (!selectionChanged && !activeChanged && !anchorChanged) {
+      return;
+    }
+
+    if (selectionChanged) {
+      setSelectedIndices(indices);
+    }
+    if (activeChanged) {
+      setActiveRowIndex(activeIndex);
+    }
+    if (anchorChanged) {
+      setShiftAnchorIndex(anchorIndex);
+    }
+  }, [displayedResults, selectedIndices, activeRowIndex, shiftAnchorIndex]);
 
   useEffect(() => {
     const handleOpenPreferences = () => setIsPreferencesOpen(true);
@@ -825,11 +912,16 @@ function App() {
               searchErrorMessage={searchErrorMessage}
               currentQuery={currentQuery}
               virtualListRef={virtualListRef}
-              results={results}
+              results={displayedResults}
               rowHeight={ROW_HEIGHT}
               overscan={OVERSCAN_ROW_COUNT}
               renderRow={renderRow}
               onScrollSync={handleHorizontalSync}
+              sortState={sortState}
+              onSortToggle={handleSortToggle}
+              sortDisabled={sortButtonsDisabled}
+              sortIndicatorMode="triangle"
+              sortDisabledTooltip={sortDisabledTooltip}
             />
           )}
         </div>
@@ -844,7 +936,12 @@ function App() {
           onRequestRescan={requestRescan}
         />
       </main>
-      <PreferencesOverlay open={isPreferencesOpen} onClose={() => setIsPreferencesOpen(false)} />
+      <PreferencesOverlay
+        open={isPreferencesOpen}
+        onClose={() => setIsPreferencesOpen(false)}
+        sortThreshold={sortThreshold}
+        onSortThresholdChange={setSortThreshold}
+      />
       {showFullDiskAccessOverlay && (
         <PermissionOverlay
           title={t('app.fullDiskAccess.title')}

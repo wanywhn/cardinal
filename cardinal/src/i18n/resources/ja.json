@@ -21,6 +21,9 @@
     "modified": "更新日時",
     "created": "作成日時"
   },
+  "sorting": {
+    "disabled": "結果が {{limit}} 件を超えているため並べ替えできません。"
+  },
   "events": {
     "columns": {
       "time": "時刻",
@@ -102,6 +105,9 @@
     "themeHint": "ライト / ダーク / システムから選択。",
     "language": "言語",
     "languageHint": "UI 言語をすぐに切り替えます。",
+    "sortingLimit": {
+      "label": "並び替えの上限"
+    },
     "close": "閉じる"
   },
   "language": {

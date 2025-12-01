@@ -21,6 +21,9 @@
     "modified": "Geändert",
     "created": "Erstellt"
   },
+  "sorting": {
+    "disabled": "Mehr als {{limit}} Ergebnisse. Sortieren ist nicht möglich."
+  },
   "events": {
     "columns": {
       "time": "Zeit",
@@ -102,6 +105,9 @@
     "themeHint": "Wähle Hell, Dunkel oder Systemstandard.",
     "language": "Sprache",
     "languageHint": "Wechsle die Oberflächensprache sofort.",
+    "sortingLimit": {
+      "label": "Sortierlimit"
+    },
     "close": "Schließen"
   },
   "language": {
