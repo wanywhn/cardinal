@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.1.14 — 2025-12-03
+- Make the results sortable(by name, path, size, create_time, modify_time)
+
 ## 0.1.13 — 2025-12-01
 - 30% lower memory usage
 - Quick Look is now fully native, with multi-file previews, smoother animations, and better alignment with macOS expectations. Thanks for [@Denis Stoyanov](https://github.com/xgrommx) for the help!
