@@ -59,7 +59,14 @@ impl HighlightCollector {
 
         let segments = query_segmentation(value);
         if let Some(segment) = segments.last() {
-            let candidates = literal_chunks(segment_value(segment));
+            let segment = match segment {
+                Segment::Concrete(concrete) => concrete,
+                Segment::GlobStar => {
+                    // "**" does not contribute to highlight terms
+                    return;
+                }
+            };
+            let candidates = literal_chunks(segment.as_value());
             if !candidates.is_empty() {
                 for candidate in candidates {
                     self.push(candidate);
@@ -99,15 +106,6 @@ fn literal_chunks(value: &str) -> Vec<String> {
         vec![trimmed.to_string()]
     } else {
         chunks
-    }
-}
-
-fn segment_value<'a>(segment: &'a Segment<'a>) -> &'a str {
-    match segment {
-        Segment::Substr(value)
-        | Segment::Prefix(value)
-        | Segment::Suffix(value)
-        | Segment::Exact(value) => value,
     }
 }
 
