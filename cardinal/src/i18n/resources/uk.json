@@ -36,8 +36,9 @@
     }
   },
   "contextMenu": {
+    "openItem": "Відкрити",
     "quickLook": "Швидкий перегляд",
-    "openInFinder": "Відкрити у Finder",
+    "revealInFinder": "Показати у Finder",
     "copyPath": "Скопіювати шлях",
     "copyFilename": "Скопіювати назву файла",
     "resetColumnWidths": "Скинути ширину стовпців"
