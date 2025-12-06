@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.15 — 2025-12-06
+- Implement double asterisk `**` in glob search.
+- Implement history navigation with `ArrowUp`/`ArrowDown` for search bar.
+- Add `Cmd+O` shortcut for file opening.
+- Refined QuickLook animation positioning logic to better handle multiple monitor setups.
+- Refined file row selection handling.
+
 ## 0.1.14 — 2025-12-03
 - Make the results sortable(by name, path, size, create_time, modify_time)
 
