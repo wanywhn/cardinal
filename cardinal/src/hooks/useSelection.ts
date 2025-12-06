@@ -4,40 +4,6 @@ import type { VirtualListHandle } from '../components/VirtualList';
 import type { SlabIndex } from '../types/slab';
 import type { SearchResultItem } from '../types/search';
 
-type SelectionSync = {
-  indices: number[];
-  activeIndex: number | null;
-  anchorIndex: number | null;
-};
-
-const remapSelection = (
-  selectedSlabs: readonly SlabIndex[],
-  displayed: readonly SlabIndex[],
-): SelectionSync => {
-  if (selectedSlabs.length === 0) {
-    return { indices: [], activeIndex: null, anchorIndex: null };
-  }
-
-  const slabSet = new Set(selectedSlabs);
-  const indices: number[] = [];
-  displayed.forEach((value, idx) => {
-    if (slabSet.has(value)) {
-      indices.push(idx);
-    }
-  });
-
-  if (indices.length === 0) {
-    return { indices: [], activeIndex: null, anchorIndex: null };
-  }
-
-  const lastIndex = indices[indices.length - 1];
-  return {
-    indices,
-    activeIndex: lastIndex,
-    anchorIndex: lastIndex,
-  };
-};
-
 type RowSelectOptions = {
   isShift: boolean;
   isMeta: boolean;
@@ -64,13 +30,14 @@ export type SelectionController = {
  */
 export const useSelection = (
   displayedResults: SlabIndex[],
+  resultsVersion: number,
   virtualListRef: RefObject<VirtualListHandle | null>,
 ): SelectionController => {
   const [selectedIndices, setSelectedIndices] = useState<number[]>([]);
   const [activeRowIndex, setActiveRowIndex] = useState<number | null>(null);
   const [shiftAnchorIndex, setShiftAnchorIndex] = useState<number | null>(null);
   const selectedIndicesRef = useRef<number[]>([]);
-  const selectedSlabIndicesRef = useRef<SlabIndex[]>([]);
+  const resultsVersionRef = useRef(resultsVersion);
 
   const handleRowSelect = useCallback(
     (rowIndex: number, options: RowSelectOptions) => {
@@ -87,12 +54,39 @@ export const useSelection = (
         setSelectedIndices(range);
       } else if (isCmdOrCtrl) {
         setSelectedIndices((prevIndices) => {
-          if (prevIndices.includes(rowIndex)) {
-            return prevIndices.filter((index) => index !== rowIndex);
+          const isDeselecting = prevIndices.includes(rowIndex);
+          const nextIndices = isDeselecting
+            ? prevIndices.filter((index) => index !== rowIndex)
+            : [...prevIndices, rowIndex];
+
+          // Handle shift anchor updates
+          if (isDeselecting && rowIndex === shiftAnchorIndex) {
+            // If deselecting the current shift anchor, find the next closest selected item below it
+            let newAnchor: number | null = null;
+            for (let i = rowIndex + 1; i < displayedResults.length; i += 1) {
+              if (nextIndices.includes(i)) {
+                newAnchor = i;
+                break;
+              }
+            }
+            // If nothing below, look upward
+            if (newAnchor === null) {
+              for (let i = rowIndex - 1; i >= 0; i -= 1) {
+                if (nextIndices.includes(i)) {
+                  newAnchor = i;
+                  break;
+                }
+              }
+            }
+            setShiftAnchorIndex(newAnchor);
+          } else if (!isDeselecting) {
+            // Only update anchor when adding (not removing) an item
+            setShiftAnchorIndex(rowIndex);
           }
-          return [...prevIndices, rowIndex];
+          // If deselecting a non-anchor item, keep the anchor unchanged
+
+          return nextIndices;
         });
-        setShiftAnchorIndex(rowIndex);
       } else {
         setSelectedIndices([rowIndex]);
         setShiftAnchorIndex(rowIndex);
@@ -100,7 +94,7 @@ export const useSelection = (
 
       setActiveRowIndex(rowIndex);
     },
-    [shiftAnchorIndex],
+    [shiftAnchorIndex, displayedResults.length],
   );
 
   const selectSingleRow = useCallback((rowIndex: number) => {
@@ -148,42 +142,19 @@ export const useSelection = (
   }, [selectedIndices]);
 
   useEffect(() => {
-    const slabs: SlabIndex[] = [];
-    selectedIndices.forEach((index) => {
-      const slabIndex = displayedResults[index];
-      if (slabIndex != null) {
-        slabs.push(slabIndex);
-      }
-    });
-    selectedSlabIndicesRef.current = slabs;
-  }, [displayedResults, selectedIndices]);
+    if (resultsVersionRef.current === resultsVersion) {
+      return;
+    }
+    resultsVersionRef.current = resultsVersion;
 
-  useEffect(() => {
-    const { indices, activeIndex, anchorIndex } = remapSelection(
-      selectedSlabIndicesRef.current,
-      displayedResults,
-    );
-
-    const selectionChanged =
-      indices.length !== selectedIndices.length ||
-      indices.some((idx, i) => idx !== selectedIndices[i]);
-    const activeChanged = activeRowIndex !== activeIndex;
-    const anchorChanged = shiftAnchorIndex !== anchorIndex;
-
-    if (!selectionChanged && !activeChanged && !anchorChanged) {
+    if (selectedIndices.length === 0 && activeRowIndex === null && shiftAnchorIndex === null) {
       return;
     }
 
-    if (selectionChanged) {
-      setSelectedIndices(indices);
-    }
-    if (activeChanged) {
-      setActiveRowIndex(activeIndex);
-    }
-    if (anchorChanged) {
-      setShiftAnchorIndex(anchorIndex);
-    }
-  }, [displayedResults, selectedIndices, activeRowIndex, shiftAnchorIndex]);
+    setSelectedIndices([]);
+    setActiveRowIndex(null);
+    setShiftAnchorIndex(null);
+  }, [resultsVersion, selectedIndices, activeRowIndex, shiftAnchorIndex]);
 
   const selectedPaths = useMemo(() => {
     const list = virtualListRef.current;
