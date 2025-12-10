@@ -447,16 +447,12 @@ function App() {
       return;
     }
 
-    const list = virtualListRef.current;
-    if (!list) {
-      return;
-    }
-
-    list.scrollToRow?.(activeRowIndex, 'nearest');
+    virtualListRef.current?.scrollToRow?.(activeRowIndex, 'nearest');
   }, [activeRowIndex]);
 
   useEffect(() => {
     clearSelection();
+    virtualListRef.current?.scrollToTop?.();
   }, [results, clearSelection]);
 
   const onQueryChange = useCallback(
@@ -512,21 +508,6 @@ function App() {
     },
     [activeTab, handleHistoryNavigation],
   );
-
-  useEffect(() => {
-    // Reset vertical scroll and prefetch initial rows to keep first render responsive
-    const list = virtualListRef.current;
-    if (!list) return;
-
-    list.scrollToTop?.();
-
-    if (!results.length || !list.ensureRangeLoaded) {
-      return;
-    }
-
-    const preloadCount = Math.min(30, results.length);
-    list.ensureRangeLoaded(0, preloadCount - 1);
-  }, [results]);
 
   const handleHorizontalSync = useCallback((scrollLeft: number) => {
     // VirtualList drives the scroll position; mirror it onto the sticky header for alignment
