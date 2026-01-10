@@ -182,11 +182,15 @@ const normalizeBrowserLanguage = (lng: string): SupportedLanguage => {
 export const normalizeLanguageTag = (lng: string): SupportedLanguage =>
   normalizeBrowserLanguage(lng);
 
-const detectInitialLanguage = (): SupportedLanguage => {
+export const getBrowserLanguage = (): SupportedLanguage => {
   if (typeof window === 'undefined') {
     return DEFAULT_LANGUAGE;
   }
+  const browserLang = window.navigator.language;
+  return browserLang ? normalizeLanguageTag(browserLang) : DEFAULT_LANGUAGE;
+};
 
+const detectInitialLanguage = (): SupportedLanguage => {
   try {
     const stored = window.localStorage.getItem(STORAGE_KEY);
     if (stored) {
@@ -199,12 +203,7 @@ const detectInitialLanguage = (): SupportedLanguage => {
     console.warn('Unable to read saved language preference', error);
   }
 
-  const browserLang = window.navigator.language;
-  if (browserLang) {
-    return normalizeLanguageTag(browserLang);
-  }
-
-  return DEFAULT_LANGUAGE;
+  return getBrowserLanguage();
 };
 
 export const __test__ = {
