@@ -81,8 +81,6 @@ function App() {
     searchParams,
     updateSearchParams,
     queueSearch,
-    resetSearchQuery,
-    cancelPendingSearches,
     handleStatusUpdate,
     setLifecycleState,
     requestRescan,
@@ -660,16 +658,10 @@ function App() {
       } else {
         // Switch to files: sync with reducer-managed search state and cancel pending timers
         ensureHistoryBuffer('');
-        resetSearchQuery();
+        queueSearch('', { immediate: true });
       }
     },
-    [
-      cancelPendingSearches,
-      ensureHistoryBuffer,
-      resetCursorToTail,
-      resetSearchQuery,
-      setEventFilterQuery,
-    ],
+    [ensureHistoryBuffer, queueSearch, resetCursorToTail, setEventFilterQuery],
   );
 
   const searchInputValue = activeTab === 'events' ? eventFilterQuery : searchParams.query;
