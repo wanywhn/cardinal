@@ -103,6 +103,7 @@ function App() {
     lifecycleState,
   } = state;
   const [activeTab, setActiveTab] = useState<ActiveTab>('files');
+  // Drives the inactive selection styling for the files panel via data-window-focused.
   const [isWindowFocused, setIsWindowFocused] = useState<boolean>(() => {
     return document.hasFocus();
   });
@@ -399,7 +400,10 @@ function App() {
     if (typeof window === 'undefined') {
       return;
     }
-    const handleWindowFocus = () => setIsWindowFocused(true);
+    const handleWindowFocus = () => {
+      setIsWindowFocused(true);
+      focusSearchInput();
+    };
     const handleWindowBlur = () => setIsWindowFocused(false);
     window.addEventListener('focus', handleWindowFocus);
     window.addEventListener('blur', handleWindowBlur);
@@ -407,7 +411,7 @@ function App() {
       window.removeEventListener('focus', handleWindowFocus);
       window.removeEventListener('blur', handleWindowBlur);
     };
-  }, []);
+  }, [focusSearchInput]);
 
   useEffect(() => {
     if (typeof document === 'undefined') {
