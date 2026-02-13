@@ -1,15 +1,22 @@
-use block2::RcBlock;
-use crossbeam_channel::bounded;
-use objc2::{AnyThread, rc::Retained};
-use objc2_app_kit::{NSBitmapImageFileType, NSBitmapImageRep, NSImage, NSWorkspace};
-use objc2_core_foundation::{CFNumber, CFString, CFURL, Type};
-use objc2_foundation::{NSData, NSDictionary, NSError, NSSize, NSString, NSURL};
-use objc2_image_io::{CGImageSource, kCGImagePropertyPixelHeight, kCGImagePropertyPixelWidth};
-use objc2_quick_look_thumbnailing::{
-    QLThumbnailGenerationRequest, QLThumbnailGenerationRequestRepresentationTypes,
-    QLThumbnailGenerator, QLThumbnailRepresentation,
+// Conditionally include Linux implementation
+#[cfg(target_os = "linux")]
+mod linux;
+
+#[cfg(target_os = "macos")]
+use {
+    block2::RcBlock,
+    crossbeam_channel::bounded,
+    objc2::{AnyThread, rc::Retained},
+    objc2_app_kit::{NSBitmapImageFileType, NSBitmapImageRep, NSImage, NSWorkspace},
+    objc2_core_foundation::{CFNumber, CFString, CFURL, Type},
+    objc2_foundation::{NSData, NSDictionary, NSError, NSSize, NSString, NSURL},
+    objc2_image_io::{CGImageSource, kCGImagePropertyPixelHeight, kCGImagePropertyPixelWidth},
+    objc2_quick_look_thumbnailing::{
+        QLThumbnailGenerationRequest, QLThumbnailGenerationRequestRepresentationTypes,
+        QLThumbnailGenerator, QLThumbnailRepresentation,
+    },
+    std::ffi::c_void,
 };
-use std::ffi::c_void;
 
 pub fn scale_with_aspect_ratio(
     width: f64,
@@ -24,13 +31,30 @@ pub fn scale_with_aspect_ratio(
 }
 
 pub fn icon_of_path(path: &str) -> Option<Vec<u8>> {
-    if let Some(data) = icon_of_path_ql(path) {
-        return Some(data);
+    #[cfg(target_os = "macos")]
+    {
+        if let Some(data) = icon_of_path_ql(path) {
+            return Some(data);
+        }
+        icon_of_path_ns(path)
     }
-    icon_of_path_ns(path)
+    
+    #[cfg(target_os = "linux")]
+    {
+        linux::icon_of_path_linux(path)
+    }
+    
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+    {
+        // Default implementation for other platforms (e.g., Windows)
+        // For now, return None - this can be extended later
+        let _path = path; // Suppress unused variable warning
+        None
+    }
 }
 
 // https://stackoverflow.com/questions/73062803/resizing-nsimage-keeping-aspect-ratio-reducing-the-image-size-while-trying-to-sc
+#[cfg(target_os = "macos")]
 pub fn icon_of_path_ns(path: &str) -> Option<Vec<u8>> {
     objc2::rc::autoreleasepool(|_| -> Option<Vec<u8>> {
         let path_ns = NSString::from_str(path);
@@ -94,6 +118,7 @@ pub fn icon_of_path_ns(path: &str) -> Option<Vec<u8>> {
     })
 }
 
+#[cfg(target_os = "macos")]
 pub fn image_dimension(image_path: &str) -> Option<(f64, f64)> {
     // https://stackoverflow.com/questions/6468747/get-image-width-and-height-before-loading-it-completely-in-iphone
     objc2::rc::autoreleasepool(|_| -> Option<(f64, f64)> {
@@ -116,6 +141,7 @@ pub fn image_dimension(image_path: &str) -> Option<(f64, f64)> {
     })
 }
 
+#[cfg(target_os = "macos")]
 pub fn icon_of_path_ql(path: &str) -> Option<Vec<u8>> {
     // We only get QLThumbnail for image, get NSWorkspace icon for other file types.
     // Therefore we just error out when image_dimension is not found.
@@ -175,16 +201,18 @@ mod tests {
             .unwrap()
             .to_string_lossy()
             .into_owned();
-        let data = icon_of_path_ns(&pwd).unwrap();
+        let data = icon_of_path(&pwd).unwrap();
         std::fs::write("/tmp/icon.png", data).unwrap();
     }
 
+    #[cfg(target_os = "macos")]
     #[test]
     fn test_icon_of_path_ql_normal() {
         let data = icon_of_path_ql("../cardinal/mac-icon_1024x1024.png").unwrap();
         std::fs::write("/tmp/icon_ql.png", data).unwrap();
     }
 
+    #[cfg(target_os = "macos")]
     #[test]
     #[should_panic = "should fail for non-image file"]
     fn test_icon_of_path_ql_non_image() {
@@ -195,6 +223,7 @@ mod tests {
         icon_of_path_ql(&pwd).expect("should fail for non-image file");
     }
 
+    #[cfg(target_os = "macos")]
     #[test]
     fn test_icon_dimension() {
         let (width, height) = image_dimension("../cardinal/mac-icon_1024x1024.png").unwrap();
@@ -202,6 +231,7 @@ mod tests {
         assert_eq!(height, 1024.0);
     }
 
+    #[cfg(target_os = "macos")]
     #[test]
     fn test_icon_dimension_not_available_for_non_image() {
         let pwd = std::env::current_dir()
@@ -235,6 +265,7 @@ mod tests {
         );
     }
 
+    #[cfg(target_os = "macos")]
     #[test]
     #[ignore]
     fn test_icon_of_file_leak() {
@@ -251,6 +282,7 @@ mod tests {
         }
     }
 
+    #[cfg(target_os = "macos")]
     #[test]
     #[ignore = "local speed test"]
     fn test_icon_generation_for_qq_images() {
