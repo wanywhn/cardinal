@@ -1,30 +1,43 @@
 use crate::{
     DEFAULT_SYSTEM_IGNORE_PATH, LOGIC_START, LogicStartConfig,
     lifecycle::load_app_state,
-    quicklook::{
-        QuickLookItemInput, close_preview_panel, toggle_preview_panel, update_preview_panel,
-    },
     search_activity,
     sort::{SortEntry, SortStatePayload, sort_entries},
     window_controls::{activate_main_window_impl, hide_main_window_impl, toggle_main_window_impl},
+};
+
+#[cfg(target_os = "macos")]
+use crate::quicklook::{
+    QuickLookItemInput, close_preview_panel, toggle_preview_panel, update_preview_panel,
+};
+
+#[cfg(target_os = "linux")]
+use crate::linux_preview::{
+    LinuxPreviewItemInput as QuickLookItemInput, close_preview_panel, toggle_preview_panel, update_preview_panel,
 };
 use anyhow::{Result, anyhow};
 use base64::{Engine as _, engine::general_purpose};
 use camino::{Utf8Path as Path, Utf8PathBuf as PathBuf};
 use crossbeam_channel::{Receiver, Sender, bounded};
-use objc2::{
-    rc::{Retained, autoreleasepool},
-    runtime::ProtocolObject,
-};
-use objc2_app_kit::{NSPasteboard, NSPasteboardItem, NSPasteboardTypeString, NSPasteboardWriting};
-use objc2_foundation::{NSArray, NSString, NSURL};
 use parking_lot::Mutex;
 use search_cache::{SearchOptions, SearchOutcome, SearchResultNode, SlabIndex, SlabNodeMetadata};
 use search_cancel::CancellationToken;
 use serde::{Deserialize, Serialize};
 use std::{cell::LazyCell, process::Command};
-use tauri::{ActivationPolicy, AppHandle, State};
+use tauri::{AppHandle, State};
 use tracing::{error, info, warn};
+
+#[cfg(target_os = "macos")]
+use objc2::{
+    rc::{Retained, autoreleasepool},
+    runtime::ProtocolObject,
+};
+#[cfg(target_os = "macos")]
+use objc2_app_kit::{NSPasteboard, NSPasteboardItem, NSPasteboardTypeString, NSPasteboardWriting};
+#[cfg(target_os = "macos")]
+use objc2_foundation::{NSArray, NSString, NSURL};
+#[cfg(target_os = "macos")]
+use tauri::{ActivationPolicy};
 
 #[derive(Debug, Clone)]
 pub struct WatchConfigUpdate {
@@ -235,31 +248,55 @@ impl NodeInfoMetadata {
 
 #[tauri::command]
 pub async fn close_quicklook(app_handle: AppHandle) {
-    let app_handle_cloned = app_handle.clone();
-    if let Err(e) = app_handle.run_on_main_thread(move || {
-        close_preview_panel(app_handle_cloned);
-    }) {
-        error!("Failed to dispatch quicklook action: {e:?}");
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    {
+        let app_handle_cloned = app_handle.clone();
+        if let Err(e) = app_handle.run_on_main_thread(move || {
+            close_preview_panel(app_handle_cloned);
+        }) {
+            error!("Failed to dispatch quicklook action: {e:?}");
+        }
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+    {
+        // 其他平台不支持预览功能
+        info!("Preview not supported on this platform");
     }
 }
 
 #[tauri::command]
 pub async fn update_quicklook(app_handle: AppHandle, items: Vec<QuickLookItemInput>) {
-    let app_handle_cloned = app_handle.clone();
-    if let Err(e) = app_handle.run_on_main_thread(move || {
-        update_preview_panel(app_handle_cloned, items);
-    }) {
-        error!("Failed to dispatch quicklook action: {e:?}");
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    {
+        let app_handle_cloned = app_handle.clone();
+        if let Err(e) = app_handle.run_on_main_thread(move || {
+            update_preview_panel(app_handle_cloned, items);
+        }) {
+            error!("Failed to dispatch quicklook action: {e:?}");
+        }
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+    {
+        // 其他平台不支持预览功能
+        info!("Preview not supported on this platform");
     }
 }
 
 #[tauri::command]
 pub async fn toggle_quicklook(app_handle: AppHandle, items: Vec<QuickLookItemInput>) {
-    let app_handle_cloned = app_handle.clone();
-    if let Err(e) = app_handle.run_on_main_thread(move || {
-        toggle_preview_panel(app_handle_cloned, items);
-    }) {
-        error!("Failed to dispatch quicklook action: {e:?}");
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    {
+        let app_handle_cloned = app_handle.clone();
+        if let Err(e) = app_handle.run_on_main_thread(move || {
+            toggle_preview_panel(app_handle_cloned, items);
+        }) {
+            error!("Failed to dispatch quicklook action: {e:?}");
+        }
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+    {
+        // 其他平台不支持预览功能
+        info!("Preview not supported on this platform");
     }
 }
 
@@ -324,12 +361,24 @@ pub fn get_nodes_info(
         .map(|SearchResultNode { path, metadata }| {
             let path = path.to_string_lossy().into_owned();
             let icon = if include_icons {
-                fs_icon::icon_of_path_ns(&path).map(|data| {
-                    format!(
-                        "data:image/png;base64,{}",
-                        general_purpose::STANDARD.encode(data)
-                    )
-                })
+                #[cfg(target_os = "macos")]
+                {
+                    fs_icon::icon_of_path_ns(&path).map(|data| {
+                        format!(
+                            "data:image/png;base64,{}",
+                            general_purpose::STANDARD.encode(data)
+                        )
+                    })
+                }
+                #[cfg(not(target_os = "macos"))]
+                {
+                    fs_icon::icon_of_path(&path).map(|data| {
+                        format!(
+                            "data:image/png;base64,{}",
+                            general_purpose::STANDARD.encode(data)
+                        )
+                    })
+                }
             } else {
                 None
             };
@@ -445,19 +494,27 @@ pub async fn toggle_main_window(app: AppHandle) {
 
 #[tauri::command]
 pub async fn set_tray_activation_policy(app: AppHandle, enabled: bool) {
-    let app_handle = app.clone();
-    if let Err(e) = app.run_on_main_thread(move || {
-        let policy = if enabled {
-            ActivationPolicy::Accessory
-        } else {
-            ActivationPolicy::Regular
-        };
-        if let Err(e) = app_handle.set_activation_policy(policy) {
-            error!("Failed to set activation policy: {e:?}");
+    #[cfg(target_os = "macos")]
+    {
+        let app_handle = app.clone();
+        if let Err(e) = app.run_on_main_thread(move || {
+            let policy = if enabled {
+                ActivationPolicy::Accessory
+            } else {
+                ActivationPolicy::Regular
+            };
+            if let Err(e) = app_handle.set_activation_policy(policy) {
+                error!("Failed to set activation policy: {e:?}");
+            }
+            activate_main_window_impl(&app_handle);
+        }) {
+            error!("Failed to dispatch activation policy update: {e:?}");
         }
-        activate_main_window_impl(&app_handle);
-    }) {
-        error!("Failed to dispatch activation policy update: {e:?}");
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        // 其他平台不支持此功能
+        info!("Tray activation policy is only supported on macOS");
     }
 }
 
@@ -467,11 +524,22 @@ pub async fn copy_files_to_clipboard(paths: Vec<String>) {
         return;
     }
 
-    if let Err(err) = copy_files_to_clipboard_impl(paths) {
-        error!("Failed to copy files to clipboard: {err:?}");
+    #[cfg(target_os = "macos")]
+    {
+        if let Err(err) = copy_files_to_clipboard_impl(paths) {
+            error!("Failed to copy files to clipboard: {err:?}");
+        }
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        // Linux 和其他平台的实现
+        if let Err(err) = copy_files_to_clipboard_linux(paths) {
+            error!("Failed to copy files to clipboard: {err:?}");
+        }
     }
 }
 
+#[cfg(target_os = "macos")]
 fn copy_files_to_clipboard_impl(paths: Vec<String>) -> Result<()> {
     autoreleasepool(|_| unsafe {
         let pasteboard = NSPasteboard::generalPasteboard();
@@ -500,6 +568,16 @@ fn copy_files_to_clipboard_impl(paths: Vec<String>) -> Result<()> {
             Err(anyhow!("NSPasteboard.writeObjects failed"))
         }
     })
+}
+
+#[cfg(not(target_os = "macos"))]
+fn copy_files_to_clipboard_linux(paths: Vec<String>) -> Result<()> {
+    // Linux 上的简单实现：复制文件路径到剪贴板
+    use arboard::Clipboard;
+    let mut clipboard = Clipboard::new().map_err(|e| anyhow!("Failed to access clipboard: {e}"))?;
+    let paths_text = paths.join("\n");
+    clipboard.set_text(&paths_text).map_err(|e| anyhow!("Failed to set clipboard text: {e}"))?;
+    Ok(())
 }
 
 #[cfg(test)]

@@ -1,7 +1,10 @@
 mod background;
 mod commands;
 mod lifecycle;
+#[cfg(target_os = "macos")]
 mod quicklook;
+#[cfg(target_os = "linux")]
+mod linux_preview;
 mod search_activity;
 mod sort;
 mod window_controls;
@@ -79,9 +82,14 @@ pub fn run() -> Result<()> {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_drag::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
-        .plugin(tauri_plugin_macos_permissions::init())
-        .plugin(tauri_plugin_window_state::Builder::new().build())
-        .on_window_event(move |window, event| {
+        .plugin(tauri_plugin_window_state::Builder::new().build());
+
+    #[cfg(target_os = "macos")]
+    {
+        builder = builder.plugin(tauri_plugin_macos_permissions::init());
+    }
+
+    builder = builder.on_window_event(move |window, event| {
             if window.label() != "main" {
                 return;
             }
@@ -206,6 +214,7 @@ pub fn run() -> Result<()> {
                     app_handle.exit(0);
                 }
             }
+            #[cfg(target_os = "macos")]
             RunEvent::Reopen { .. } => {
                 // On macOS, clicking the Dock icon should bring the main window back even if the
                 // app still "has windows" but they are hidden.

@@ -263,6 +263,7 @@ fn handle_icon_viewport_update(
         .for_each(|(slab_index, path)| {
             let icon_update_tx = icon_update_tx.clone();
             spawn(move || {
+                #[cfg(target_os = "macos")]
                 if let Some(icon) = fs_icon::icon_of_path_ql(&path).map(|data| {
                     format!(
                         "data:image/png;base64,{}",
