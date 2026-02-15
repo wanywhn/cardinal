@@ -6,8 +6,8 @@ Cardinal is a macOS desktop search app built with a React/Tauri frontend and a R
 - **Frontend (cardinal/)**: React + Vite UI. Talks to Tauri commands for search, metadata, window control, and previews. Initializes menu, global shortcuts, and theme preference; tray is enabled based on user settings.
 - **Desktop shell (cardinal/src-tauri/)**: Tauri entrypoint. Registers plugins (global shortcuts, window state, opener, drag, macOS permissions, prevent-default in prod), wires commands, owns app lifecycle, and spawns the background logic thread.
 - **Search engine (search-cache/)**: Maintains an in-memory index of the filesystem (slab-based storage with compact nodes, name index backed by an interned name pool, lazy metadata cache), persists to disk, and serves queries with highlighting and cancellation support.
-- **Filesystem events (cardinal-sdk/)**: Thin wrapper over macOS FSEvents providing `EventWatcher` and event flags; used to keep the index in sync.
-- **Icon extraction (fs-icon/)**: macOS icon retrieval via Quick Look / NSWorkspace, returning base64-encoded PNGs.
+- **Filesystem events (cardinal-sdk/)**: Cross-platform filesystem event monitoring providing `EventWatcher` and event flags; uses macOS FSEvents on macOS and Linux inotify on Linux; used to keep the index in sync.
+- **Icon extraction (fs-icon/)**: Cross-platform icon retrieval; uses macOS Quick Look / NSWorkspace on macOS and system icon themes (GTK/XDG) on Linux, returning base64-encoded PNGs.
 
 Overall architecture:
 ```text
@@ -35,18 +35,18 @@ Overall architecture:
  ┌───────────────┴─────────────────────▼─────────────────┐
  │               Background logic thread                  │
  │  - SearchCache (slab + name index + metadata)         │
- │  - EventWatcher (FSEvents)                            │
+ │  - EventWatcher (FSEvents on macOS, inotify on Linux) │
  │  - fswalk (initial walk / rescans)                    │
- │  - fs-icon (NSWorkspace + QuickLook icons)            │
+ │  - fs-icon (NSWorkspace + QuickLook on macOS, system icons on Linux) │
  └───────────────────────────────────────────────────────┘
 ```
 
 ## Key data flow
 1) **Startup**: `cardinal/src-tauri/src/lib.rs` builds the Tauri app, registers plugins, and constructs channels for search, node info, icon viewport, rescans, watch config, and shutdown. It spawns a background thread via `run_background_event_loop`.
 2) **Index hydration**: The background loop loads a persistent cache when possible (`SearchCache::try_read_persistent_cache`); otherwise it walks the filesystem via `build_search_cache` (which uses `walk_fs_with_walk_data`). It emits status updates to the UI while scanning.
-3) **Live updates**: `EventWatcher` streams FSEvents. The background loop feeds them to the cache; a rescan is triggered on error conditions or when flags/paths suggest the index may be stale. New events are batched to the frontend for recent-activity views.
+3) **Live updates**: `EventWatcher` streams filesystem events (FSEvents on macOS, inotify on Linux). The background loop feeds them to the cache; a rescan is triggered on error conditions or when flags/paths suggest the index may be stale. New events are batched to the frontend for recent-activity views.
 4) **Queries**: UI sends the `search` command with options and a cancellation token version. The background loop runs `cache.search_with_options`, returning result slab indices and highlights. `update_icon_viewport` prompts icon loads for visible rows; icons are emitted back over an event channel.
-5) **Metadata & icons**: `get_nodes_info` expands slab indices into paths/metadata and attaches icons via `fs_icon::icon_of_path_ns`. For grid/list views, additional icons are fetched with Quick Look (`icon_of_path_ql`) on background threads.
+5) **Metadata & icons**: `get_nodes_info` expands slab indices into paths/metadata and attaches icons via `fs_icon::icon_of_path` (uses NSWorkspace on macOS, system icon themes on Linux). For grid/list views on macOS, additional icons are fetched with Quick Look (`icon_of_path_ql`) on background threads.
 6) **Window control & UX**: Commands (`activate_main_window`, `toggle_main_window`, `hide_main_window`) manage visibility. Quick Look (`toggle_quicklook`/`update_quicklook`/`close_quicklook`) talks directly to `QLPreviewPanel` via `quicklook.rs`, while Finder/open actions (`open_in_finder`, `open_path`) use the macOS `open` binary. The single global shortcut (`Cmd+Shift+Space`) is registered through `@tauri-apps/plugin-global-shortcut`.
 7) **Watch config**: The UI calls `start_logic(watch_root, ignore_paths)` at startup and can later update the root/ignore list via `set_watch_config`, which rebuilds the cache and watcher when values change.
 
@@ -62,14 +62,14 @@ Overall architecture:
 ## Backend layout (Rust workspace)
 - `cardinal/src-tauri/src/lib.rs`: Tauri bootstrap and plugin wiring.
 - `cardinal/src-tauri/src/commands.rs`: Tauri command handlers (search, node info, rescan, window ops, Quick Look/Finder).
-- `cardinal/src-tauri/src/background.rs`: Background event loop for queries, FSEvents ingestion, rescans, icon loading, and status updates.
+- `cardinal/src-tauri/src/background.rs`: Background event loop for queries, filesystem event ingestion (FSEvents/inotify), rescans, icon loading, and status updates.
 - `cardinal/src-tauri/src/lifecycle.rs`: Tracks app lifecycle state and persistence of readiness.
 - `cardinal/src-tauri/src/window_controls.rs`: Abstractions for showing/hiding/activating the main window.
 - `cardinal/src-tauri/src/quicklook.rs`: Owns the native `QLPreviewPanel` bridge used by `toggle_quicklook`/`update_quicklook`/`close_quicklook`.
 - `search-cache/`: Core index, query engine, persistence, highlighting, and slab management.
 - `fswalk/`: Filesystem walker used by the cache to build initial state.
-- `cardinal-sdk/`: FSEvents bindings and helpers.
-- `fs-icon/`: Icon extraction via macOS APIs.
+- `cardinal-sdk/`: Cross-platform filesystem event bindings and helpers (FSEvents for macOS, inotify for Linux).
+- `fs-icon/`: Cross-platform icon extraction (macOS APIs for macOS, system icon themes for Linux).
 - `query-segmentation/`: Parses slash-delimited search tokens into prefix/suffix/exact/substr segments.
 - `cardinal-syntax/`: Everything-style query parser (operators, filters, grouping).
 - `search-cancel/`: Cancellation token with versioning for aborting stale searches.
@@ -85,9 +85,9 @@ Overall architecture:
 - **Global shortcuts**: Primary `Cmd+Shift+Space`; failures are logged (there is no automatic fallback accelerator today).
 
 ## Development workflow
-- **Rust**: `cargo check --workspace`, `cargo test --workspace`, `cargo clippy --workspace --all-targets`, `cargo fmt --all`. Toolchain pinned via `rust-toolchain.toml` (`nightly-2025-05-09`).
+- **Rust**: `cargo check --workspace`, `cargo test --workspace`, `cargo clippy --workspace --all-targets`, `cargo fmt --all`. Toolchain pinned via `rust-toolchain.toml` (`nightly-2025-05-09`). Note that `cardinal-sdk` and `fs-icon` now support cross-platform compilation (macOS and Linux).
 - **Frontend**: `cd cardinal && npm ci`; `npm run dev` (Vite), `npm run tauri dev -- --release --features dev`; `npm run build` or `npm run tauri build` for production.
- - **Testing strategy**: Unit tests live beside code; cross-crate tests in each crate’s `tests/`. Frontend uses Vitest/JSDOM. Performance and UI regressions should be checked after `npm run build`.
+ - **Testing strategy**: Unit tests live beside code; cross-crate tests in each crate's `tests/`. Frontend uses Vitest/JSDOM. Performance and UI regressions should be checked after `npm run build`.
 
 ## Debugging tips
 - Watch Tauri logs (tracing) for lifecycle, search, and rescan events.

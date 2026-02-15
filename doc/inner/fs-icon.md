@@ -1,22 +1,37 @@
-# FS Icon (macOS Icons & Thumbnails)
+# FS Icon (Cross-Platform Icons & Thumbnails)
 
-This chapter documents the `fs-icon/` crate, which provides macOS file/folder icons and QuickLook thumbnails.
+This chapter documents the `fs-icon/` crate, which provides cross-platform file/folder icons and thumbnails, supporting both macOS and Linux.
 
 ---
 
 ## Overview
 
-`fs-icon` exposes three main APIs:
-- `icon_of_path(path: &str) -> Option<Vec<u8>>` — best-effort icon as PNG bytes (QuickLook first, then NSWorkspace).
-- `icon_of_path_ns(path: &str) -> Option<Vec<u8>>` — icon from `NSWorkspace::iconForFile`.
-- `icon_of_path_ql(path: &str) -> Option<Vec<u8>>` — QuickLook-generated thumbnail for image-like files.
-- `image_dimension(path: &str) -> Option<(f64, f64)>` — lightweight width/height probe via Image I/O.
+`fs-icon` exposes cross-platform APIs:
+- `icon_of_path(path: &str) -> Option<Vec<u8>>` — best-effort icon as PNG bytes.
+  - **macOS**: Tries QuickLook first, then NSWorkspace.
+  - **Linux**: Uses system icon theme via GTK or XDG directories.
+- `icon_of_path_ns(path: &str) -> Option<Vec<u8>>` — icon from `NSWorkspace::iconForFile` (macOS only).
+- `icon_of_path_ql(path: &str) -> Option<Vec<u8>>` — QuickLook-generated thumbnail for image-like files (macOS only).
+- `image_dimension(path: &str) -> Option<(f64, f64)>` — lightweight width/height probe via Image I/O (macOS only).
 
 All image data is returned as PNG bytes, ready to be base64-encoded by the Tauri backend.
 
+## Linux Implementation
+
+On Linux, `fs-icon` uses the following approach:
+
+1. **MIME Type Detection**: Uses `mime_guess` to determine the file type based on extension.
+2. **Icon Name Mapping**: Maps MIME types to standard icon names (e.g., "folder" for directories, "application-pdf" for PDFs).
+3. **Icon Retrieval**: Attempts to retrieve icons via:
+   - **GTK Icon Theme**: Uses the system's default icon theme via `gtk::IconTheme`.
+   - **XDG Directories**: Falls back to searching standard XDG icon directories for common themes (hicolor, oxygen, gnome) in various sizes and categories (mimetypes, apps, places).
+4. **Fallback Strategy**: If no specific icon is found, falls back to generic icons based on file type or directory status.
+
+The Linux implementation supports common icon themes and standard icon sizes (scalable, 256x256, 128x128, 64x64, 48x48, 32x32, 24x24, 16x16).
+
 ---
 
-## NSWorkspace-based icons
+## NSWorkspace-based icons (macOS only)
 
 `icon_of_path_ns` uses the system icon for a file or folder:
 
@@ -31,7 +46,7 @@ The function runs inside an autorelease pool to avoid leaking Cocoa objects.
 
 ---
 
-## QuickLook thumbnails
+## QuickLook thumbnails (macOS only)
 
 `icon_of_path_ql` uses QuickLook to generate thumbnails for image-like content:
 
@@ -46,7 +61,7 @@ The function runs inside an autorelease pool to avoid leaking Cocoa objects.
    - On success, convert the representation to PNG via `NSBitmapImageRep`.
    - On failure or unsupported file types, return `None`.
 
-QuickLook is generally used for richer, content-aware thumbnails and is tried first in `icon_of_path`.
+QuickLook is generally used for richer, content-aware thumbnails and is tried first in `icon_of_path` on macOS.
 
 ---
 
@@ -63,7 +78,10 @@ This helper is shared by both NSWorkspace and QuickLook code paths to keep icons
 ## Integration notes
 
 - The Tauri backend uses:
-  - `icon_of_path_ns` in `get_nodes_info` to attach icons to rows from the name index.
-  - `icon_of_path_ql` in the icon viewport worker to load higher-fidelity thumbnails for visible rows.
-- UI code only ever sees base64 data URIs (`data:image/png;base64,...`); it is agnostic to the source (NSWorkspace vs QuickLook).
-- Non-image files passed to `icon_of_path_ql` will return `None`; tests enforce this behavior so callers can fall back gracefully.
+  - `icon_of_path` in `get_nodes_info` to attach icons to rows from the name index (cross-platform).
+  - On macOS: `icon_of_path_ql` in the icon viewport worker to load higher-fidelity thumbnails for visible rows.
+- UI code only ever sees base64 data URIs (`data:image/png;base64,...`); it is agnostic to the source (NSWorkspace vs QuickLook vs Linux icon theme).
+- Platform-specific behavior:
+  - **macOS**: Tries QuickLook first, then NSWorkspace icons.
+  - **Linux**: Uses system icon theme via GTK/XDG directories.
+- Non-image files passed to `icon_of_path_ql` will return `None` on macOS; tests enforce this behavior so callers can fall back gracefully.
