@@ -1,27 +1,75 @@
-import { hilog } from '@kit.PerformanceAnalysisKit';
-// import testNapi from 'libentry.so';
-import cardinal from 'libcardinal_ohos.so';
 
-const DOMAIN = 0x0000;
-
+import { AppStateManager, AppState } from '../types/AppStateManager'
+import { SearchBar } from './SearchBar'
+import { FilesTab } from './FilesTab'
+import { EventsTab } from './EventsTab'
+/**
+ * 主页面组件
+ */
 @Entry
-@Component
+@ComponentV2
 struct Index {
-  @State message: string = 'Hello World';
-
+  private currentTabIndex: number = 0
+  private appState: AppStateManager = AppStateManager.getInstance()
+  private currentState: AppState = this.appState.getState()
+  
+  aboutToAppear(): void {
+    // 订阅状态变化
+    this.appState.subscribe(this.updateUI.bind(this))
+    // 初始化状态
+    this.currentState = this.appState.getState()
+  }
+  updateUI(state: AppState): void {
+    // 当状态变化时更新UI
+    this.currentState = state
+    console.info("State updated, refreshing UI")
+  }
   build() {
-    Row() {
-      Column() {
-        Text(this.message)
-          .fontSize($r('app.float.page_text_font_size'))
-          .fontWeight(FontWeight.Bold)
-          .onClick(() => {
-            this.message = 'Welcome';
-            hilog.info(DOMAIN, 'testTag', 'Test NAPI 2 + 3 = %{public}d', cardinal.add(2, 3));
+    Column() {
+      // 搜索栏
+      SearchBar({
+        queryChangeCallback: (query: string) => {
+          this.appState.setSearchQuery(query)
+          // TODO: 实现搜索功能
+          this.handleSearch(query)
+        },
+        toggleCaseSensitiveCallback: (value: boolean) => {
+          if (value !== this.currentState.caseSensitive) {
+            this.appState.toggleCaseSensitive()
+          }
+        }
+      })
+      // 标签页切换
+      Tabs({ barPosition: BarPosition.Start }) {
+        TabContent() {
+          FilesTab({
+            paramSearchQuery :this.currentState.searchQuery,
+            paramCaseSensitive:this.currentState.caseSensitive
           })
+        }
+        .tabBar("Files")
+        TabContent() {
+          EventsTab()
+        }
+        .tabBar("Events")
       }
-      .width('100%')
+      .vertical(false)
+      .barMode(BarMode.Fixed)
+      .onChange((index: number) => {
+        this.currentTabIndex = index
+        this.appState.setActiveTab(index)
+      })
     }
     .height('100%')
+    .backgroundColor($r('app.color.main_background_color'))
+  }
+  
+  /**
+   * 处理搜索请求
+   */
+  private handleSearch(query: string): void {
+    // 打桩：实际的搜索功能将通过FFI调用实现
+    console.info(`Searching for: ${query}`)
+    this.appState.performSearch(query)
   }
 }
