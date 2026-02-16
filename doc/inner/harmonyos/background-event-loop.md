@@ -17,9 +17,10 @@ HarmonyOS Cardinal uses a modified background event loop optimized for the mobil
 ## Communication Architecture
 
 ### FFI-based Communication Pattern
+
 ```
-ArkUI Frontend 
-    ↓ (FFI calls via ohrs)
+ArkUI Frontend
+    ↓ (FFI calls via ohos-rs)
 Rust Backend Service Layer
     ↓ (Internal task spawning)
 Background TaskPool Workers
@@ -31,7 +32,7 @@ Frontend Event Handlers
 
 ```
 [search_command]        ──▶ Search request (query + options + callback ID)
-[node_info_command]     ──▶ Slab indices needing path/metadata expansion  
+[node_info_command]     ──▶ Slab indices needing path/metadata expansion
 [icon_prefetch_command] ──▶ Visible slab indices for icon prefetching
 [rescan_command]        ──▶ Manual rescan requests
 [config_update_command] ──▶ Watch configuration updates
@@ -40,6 +41,7 @@ Frontend Event Handlers
 ```
 
 Unlike desktop version using crossbeam channels, HarmonyOS uses:
+
 - **Direct FFI calls**: Synchronous calls for simple operations
 - **Async tasks with callbacks**: For long-running operations via HarmonyOS TaskPool
 - **Event emission**: Results delivered through registered callbacks
@@ -49,6 +51,7 @@ Unlike desktop version using crossbeam channels, HarmonyOS uses:
 ## Main Processing Loop
 
 ### Event Dispatching Architecture
+
 ```text
 ┌─────────────────────────────────────────────┐
 │             HarmonyOS App Task              │
@@ -75,24 +78,26 @@ Unlike desktop version using crossbeam channels, HarmonyOS uses:
 
 ### Key Differences from Desktop
 
-| Aspect | Desktop (macOS/Linux) | HarmonyOS |
-|--------|----------------------|-----------|
-| **Thread Model** | Dedicated background thread | TaskPool worker threads |
-| **Communication** | Crossbeam channels | FFI calls + callbacks |
-| **Concurrency** | Single event loop | Parallel task execution |
-| **Resource Mgmt** | Manual thread control | HarmonyOS-managed tasks |
-| **Lifecycle** | Independent thread lifecycle | Tied to app lifecycle |
+| Aspect            | Desktop (macOS/Linux)        | HarmonyOS               |
+| ----------------- | ---------------------------- | ----------------------- |
+| **Thread Model**  | Dedicated background thread  | TaskPool worker threads |
+| **Communication** | Crossbeam channels           | FFI calls + callbacks   |
+| **Concurrency**   | Single event loop            | Parallel task execution |
+| **Resource Mgmt** | Manual thread control        | HarmonyOS-managed tasks |
+| **Lifecycle**     | Independent thread lifecycle | Tied to app lifecycle   |
 
 ---
 
 ## Filesystem Monitoring on HarmonyOS
 
 ### HarmonyOS Filesystem API Integration
+
 - **EventWatcher Adaptation**: `cardinal-sdk` extended with HarmonyOS-specific filesystem monitoring
 - **Polling Strategy**: Limited background polling on HarmonyOS (reduced frequency for battery optimization)
 - **Change Batches**: Events grouped and delivered in batches for efficiency
 
 ### Filesystem Event Flow
+
 ```
 HarmonyOS Filesystem API
     ↓ (File change events)
@@ -107,6 +112,7 @@ SearchCache::handle_fs_events()
 ```
 
 ### Adaptive Monitoring
+
 - **Foreground Mode**: Active monitoring with normal frequency
 - **Background Mode**: Reduced monitoring or paused (depending on HarmonyOS policy)
 - **Battery Saver**: Further reduced frequency or disabled
@@ -116,6 +122,7 @@ SearchCache::handle_fs_events()
 ## Search Processing Pipeline
 
 ### Search Request Flow
+
 ```
 1. ArkTS UI → search() FFI call
 2. FFI layer → creates search job with callback ID
@@ -126,6 +133,7 @@ SearchCache::handle_fs_events()
 ```
 
 ### Performance Optimizations
+
 - **Query Caching**: Cache recent search results (limited memory)
 - **Incremental Results**: Deliver partial results as they become available
 - **Priority Queue**: Search tasks prioritized over metadata/icon tasks
@@ -135,19 +143,22 @@ SearchCache::handle_fs_events()
 ## Metadata and Icon Pipeline
 
 ### Node Information Expansion
+
 - **Lazy Loading**: Metadata loaded on-demand when UI needs it
 - **Batch Processing**: Multiple slab indices expanded in single FFI call
 - **Caching**: Frequently accessed node info cached in memory
 
 ### Icon Handling (HarmonyOS Adaptation)
+
 - **Current Status**: Placeholder/stub implementation (full icon system TBD)
-- **Future Integration**: 
+- **Future Integration**:
   - HarmonyOS system icon providers
   - File-type detection via MIME
   - Custom icon extraction for specific file types
 - **Placeholder Strategy**: Generic icons based on file type/category
 
 ### Icon Prefetch Strategy
+
 ```
 Visible Viewport Indices
     ↓ (via icon_prefetch_command)
@@ -165,6 +176,7 @@ UI icon updates via callback
 ## Rescan and Configuration Updates
 
 ### Rescan Flow (Adapted)
+
 ```
 perform_rescan_harmonyos:
   1. Set lifecycle state → INDEXING
@@ -179,6 +191,7 @@ perform_rescan_harmonyos:
 ```
 
 ### Watch Configuration Updates
+
 - **Dynamic Updates**: Configuration can change without restart
 - **Validation**: Path validation using HarmonyOS filesystem APIs
 - **Seamless Transition**: Old cache retained during rebuild, swapped on success
@@ -188,20 +201,22 @@ perform_rescan_harmonyos:
 ## Lifecycle Integration
 
 ### HarmonyOS App State Coordination
+
 ```
-Ability.onCreate()
+Ability.onCreate
     ↓ Initialize Rust backend (lightweight)
-Ability.onWindowStageCreate()
+Ability.onWindowStageCreate
     ↓ Full backend initialization (if not already done)
-Ability.onForeground()
+Ability.onForeground
     ↓ Resume filesystem monitoring, refresh UI state
-Ability.onBackground()
+Ability.onBackground
     ↓ Pause intensive operations, persist cache if needed
-Ability.onDestroy()
+Ability.onDestroy
     ↓ Clean shutdown, persist final cache state
 ```
 
 ### Background Task Management
+
 - **Task Priorities**: Search > UI updates > Prefetch > Maintenance
 - **Resource Awareness**: Scale back during low battery/thermal throttling
 - **Graceful Degradation**: Reduce functionality rather than crash
@@ -211,12 +226,14 @@ Ability.onDestroy()
 ## Error Handling and Recovery
 
 ### Error Categories
+
 1. **Permission Errors**: Handle HarmonyOS permission denials gracefully
 2. **Storage Errors**: Disk full, corrupt cache files
 3. **Filesystem Errors**: Unavailable paths, mount changes
 4. **Resource Errors**: Memory pressure, task limits
 
 ### Recovery Strategies
+
 - **Automatic Retry**: With exponential backoff for transient errors
 - **User Notification**: Clear error messages with recovery options
 - **Fallback Modes**: Reduced functionality instead of complete failure
@@ -227,16 +244,19 @@ Ability.onDestroy()
 ## Performance Considerations
 
 ### Memory Management
+
 - **Cache Limits**: Configurable limits based on device capabilities
 - **LRU Eviction**: Least recently used data removed first
 - **Memory Pressure Response**: Proactive cache reduction during memory warnings
 
 ### Battery Optimization
+
 - **Aggressive Batching**: Group operations to minimize wake-ups
 - **Intelligent Polling**: Adaptive filesystem monitoring frequency
 - **Background Restrictions**: Respect HarmonyOS background task policies
 
 ### Cold Start Optimization
+
 - **Lazy Initialization**: Defer non-essential setup
 - **Progressive Loading**: Load search cache in background while UI is responsive
 - **Placeholder Content**: Show UI immediately, populate with data as available
@@ -246,18 +266,21 @@ Ability.onDestroy()
 ## Testing and Debugging
 
 ### Testing Strategy
+
 - **Unit Tests**: Core logic tested independently of HarmonyOS
 - **Integration Tests**: FFI boundary testing with mock callbacks
 - **Performance Tests**: Measure memory, battery, and responsiveness
 - **Edge Cases**: Permission changes, storage full, network interruptions
 
 ### Debugging Tools
+
 - **Unified Logging**: `tracing` in Rust, `hilog` in ArkTS, cross-referenced
 - **Performance Profiling**: HarmonyOS performance analysis tools
 - **Memory Debugging**: HarmonyOS memory leak detection
 - **State Inspection**: Dump current state for post-mortem analysis
 
 ### Monitoring Points
+
 1. **Task Queue Length**: Monitor backlog of pending operations
 2. **Memory Usage**: Track cache size and overall memory footprint
 3. **Battery Impact**: Measure background activity battery consumption
@@ -268,12 +291,14 @@ Ability.onDestroy()
 ## Future Optimizations
 
 ### Planned Enhancements
+
 1. **Predictive Prefetch**: Anticipate user actions based on usage patterns
 2. **Intelligent Caching**: Adaptive cache size based on usage frequency
 3. **Cloud Integration**: (Future) Sync and search across devices
 4. **ML-powered Ranking**: Improve result relevance with on-device ML
 
 ### Platform Evolution
+
 - **New HarmonyOS APIs**: Leverage improved filesystem and background APIs
 - **Hardware Acceleration**: Use device-specific capabilities where available
 - **Cross-device Features**: Integration with HarmonyOS ecosystem

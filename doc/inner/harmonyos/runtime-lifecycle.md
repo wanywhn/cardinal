@@ -10,7 +10,7 @@ HarmonyOS Cardinal follows a client-server architecture where:
 
 - **ArkUI Frontend**: Manages UI state, user interactions, and lifecycle events
 - **Rust Backend**: Handles search indexing, filesystem monitoring, and core logic
-- **FFI Bridge**: Mediates communication between ArkUI and Rust using ohrs toolkit
+- **FFI Bridge**: Mediates communication between ArkUI and Rust using ohos-rs toolkit
 
 The lifecycle is inherently asynchronous due to the inter-process communication nature of FFI calls.
 
@@ -143,21 +143,22 @@ pub const STATE_ERROR: u8 = 5;
 #### ArkUI State Manager (`cardinal-harmony/entry/src/main/ets/services/StateManager.ets`)
 
 ```typescript
-export class StateManager {
-  private currentState: AppLifecycleState = AppLifecycleState.UNINITIALIZED;
-  private stateListeners: Array<StateListener> = [];
+@ComponentV2
+struct StateManager {
+  @Track currentState: AppLifecycleState = AppLifecycleState.UNINITIALIZED;
+  @Track stateListeners: Array<StateListener> = [];
 
   // HarmonyOS lifecycle integration
-  onAbilityCreate(): void {
+  @Local onAbilityCreate: () => void = () => {
     this.transitionTo(AppLifecycleState.INITIALIZING);
     this.initializeBackend();
   }
 
-  onAbilityForeground(): void {
+  @Local onAbilityForeground: () => void = () => {
     this.checkForUpdates();
   }
 
-  onAbilityBackground(): void {
+  @Local onAbilityBackground: () => void = () => {
     this.pauseMonitoring(); // Optional - HarmonyOS may handle this
   }
 }
@@ -267,7 +268,7 @@ fn update_lifecycle_state(new_state: u8) {
 
 ### Logging Strategy
 
--- **FFI Bridge**： Use `ohos-hilog-binding` (a binding crate for HarmonyOS's hilog) for harmony-bindings logging
+#### **FFI Bridge**: Use `ohos-hilog-binding` (a binding crate for HarmonyOS's hilog) for harmony-bindings logging
 
 - **Rust Backend**: Use `tracing` with HarmonyOS log integration
 - **ArkUI Frontend**: Use `hilog` for HarmonyOS-compatible logging
