@@ -115,7 +115,7 @@ class MockSearchService implements SearchService {
       mockEvents.forEach(event => {
         callback(event);
       });
-    }, 5000); // 每5秒发送一次模拟事件
+    }, 50000); // 每5秒发送一次模拟事件
   }
 
   stopWatchingFileSystemEvents(): void {

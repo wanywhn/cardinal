@@ -9,7 +9,6 @@ import { EventsTab } from './EventsTab'
 @Entry
 @ComponentV2
 struct Index {
-  private currentTabIndex: number = 0
   private appState: AppStateManager = AppStateManager.getInstance()
   private currentState: AppState = this.appState.getState()
   
@@ -38,7 +37,7 @@ struct Index {
             this.appState.toggleCaseSensitive()
           }
         }
-      })
+      }).height(50)
       // 标签页切换
       Tabs({ barPosition: BarPosition.Start }) {
         TabContent() {
@@ -53,14 +52,14 @@ struct Index {
         }
         .tabBar("Events")
       }
+      .barPosition(BarPosition.End)
       .vertical(false)
       .barMode(BarMode.Fixed)
       .onChange((index: number) => {
-        this.currentTabIndex = index
         this.appState.setActiveTab(index)
       })
     }
-    .height('100%')
+    .height('95%')
     .backgroundColor($r('app.color.main_background_color'))
   }
   
