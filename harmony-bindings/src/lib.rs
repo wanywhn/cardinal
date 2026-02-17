@@ -1,7 +1,8 @@
-use base64::{Engine as _, engine::general_purpose};
+use base64::{engine::general_purpose, Engine as _};
 use fs_icon;
 use napi_derive_ohos::napi;
 use napi_ohos::{Error, Result};
+use ohos_hilog_binding::hilog_debug;
 use once_cell::sync::{Lazy, OnceCell};
 use search_cache::{SearchCache, SearchOptions, SearchResultNode, SlabNodeMetadataCompact};
 use search_cancel::CancellationToken;
@@ -96,19 +97,18 @@ pub async fn initialize_harmony_backend(
     watch_root: String,
     ignore_paths: Vec<String>,
 ) -> Result<u8> {
-    println!("Starting HarmonyOS backend initialization");
+    hilog_debug!("Backend: Starting HarmonyOS backend initialization");
     update_lifecycle_state(STATE_INITIALIZING);
 
     // 初始化数据库路径
-    let db_path = PathBuf::from("/data/storage/el1/bundle/cardinal.db");
-    dbg!(&db_path);
+    let db_path = PathBuf::from("com.wanywhn.anything/data/storage/el2/cardinal.db");
 
     DB_PATH
         .set(db_path)
         .map_err(|_| Error::from_reason("Failed to set DB path"))?;
 
-    println!(
-        "Starting backend with watch_root: {}, ignore_paths: {}",
+    hilog_debug!(
+        "Backend: Starting backend with watch_root: {}, ignore_paths: {}",
         watch_root,
         ignore_paths.len()
     );
@@ -116,7 +116,7 @@ pub async fn initialize_harmony_backend(
     // 在异步任务中运行逻辑线程
     tokio::task::spawn_blocking(move || {
         if let Err(e) = run_logic_thread(watch_root, ignore_paths) {
-            println!("Logic thread failed: {}", e);
+            hilog_debug!("Backend: Logic thread failed: {}", e);
             update_lifecycle_state(STATE_ERROR);
         }
     });
@@ -159,23 +159,23 @@ fn run_logic_thread(watch_root: String, ignore_paths: Vec<String>) -> Result<()>
         .get()
         .ok_or_else(|| Error::from_reason("DB path not initialized"))?;
 
-    println!(
-        "Attempting to initialize backend with watch_root: {}",
+    hilog_debug!(
+        "Backend: Attempting to initialize backend with watch_root: {}",
         watch_root
     );
-    println!("Database path: {:?}", db_path);
-    println!("Ignore paths: {:?}", ignore_paths);
+    hilog_debug!("Backend: Database path: {:?}", db_path);
+    hilog_debug!("Backend: Ignore paths: {:?}", ignore_paths);
 
     // 构建搜索缓存
     let watch_path = PathBuf::from(&watch_root);
     let ignore_paths: Vec<PathBuf> = ignore_paths.iter().map(PathBuf::from).collect();
 
-    println!("Building search cache for path: {:?}", watch_path);
+    hilog_debug!("Backend :Building search cache for path: {:?}", watch_path);
 
     // 创建搜索缓存
     let search_cache = SearchCache::walk_fs(&watch_path);
-    println!(
-        "Search cache built successfully. Total files: {}",
+    hilog_debug!(
+        "Backend: Search cache built successfully. Total files: {}",
         search_cache.get_total_files()
     );
 
@@ -187,7 +187,7 @@ fn run_logic_thread(watch_root: String, ignore_paths: Vec<String>) -> Result<()>
         state.lifecycle_state = STATE_READY;
     }
 
-    println!("HarmonyOS backend is ready");
+    hilog_debug!("Backend: HarmonyOS backend is ready");
     Ok(())
 }
 
@@ -207,9 +207,9 @@ pub async fn search(
         )));
     }
 
-    println!("Searching for: '{}'", query);
-    println!("Case insensitive: {:?}", case_insensitive);
-    println!("Max results: {:?}", max_results);
+    hilog_debug!("Backend:Searching for: '{}'", query);
+    hilog_debug!("Backend:Case insensitive: {:?}", case_insensitive);
+    hilog_debug!("Backend:Max results: {:?}", max_results);
 
     // 获取搜索缓存
     let search_cache_ref = match &state.search_cache {
@@ -240,11 +240,11 @@ pub async fn search(
                 .map(|idx| idx.get() as u32)
                 .collect();
 
-            println!("Search returned {} results", results.len());
+            hilog_debug!("Backend:Search returned {} results", results.len());
             Ok(results)
         }
         Err(e) => {
-            println!("Search error: {}", e);
+            hilog_debug!("Backend:Search error: {}", e);
             Err(Error::from_reason(format!("Search failed: {}", e)))
         }
     }
@@ -253,10 +253,11 @@ pub async fn search(
 // 获取节点信息 - 桩实现
 #[napi]
 pub async fn get_nodes_info(
-    results: Vec<u32>,
+    slab_indices: Vec<u32>,
     include_icons: Option<bool>,
 ) -> Result<Vec<NodeInfo>> {
-    if results.is_empty() {
+    if slab_indices.is_empty() {
+        hilog_debug!("Backend: get_nodes_info for empty idx");
         return Ok(Vec::new());
     }
 
@@ -277,7 +278,7 @@ pub async fn get_nodes_info(
         .into_iter()
         .map(|SearchResultNode { path, metadata }| {
             let path_str = path.to_string_lossy().into_owned();
-            
+
             // 计算图标（如果需要）
             let icon = if include_icons {
                 // 鸿蒙平台使用 fs-icon 库获取图标
