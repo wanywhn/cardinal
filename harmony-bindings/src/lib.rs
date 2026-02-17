@@ -39,29 +39,19 @@ pub struct NodeInfoMetadata {
 
 impl NodeInfoMetadata {
     fn from_metadata(metadata: &SlabNodeMetadataCompact) -> Self {
-        if metadata.is_some() {
-            if let Some(metadata_ref) = metadata.as_ref() {
-                Self {
-                    r#type: metadata_ref.r#type() as u8,
-                    size: metadata_ref.size(),
-                    ctime: metadata_ref.ctime().map(|x| x.get()).unwrap_or_default(),
-                    mtime: metadata_ref.mtime().map(|x| x.get()).unwrap_or_default(),
-                }
-            } else {
-                Self {
-                    r#type: 0,
-                    size: -1,
-                    ctime: 0,
-                    mtime: 0,
-                }
-            }
-        } else {
-            Self {
+        match metadata.as_ref() {
+            Some(metadata_ref) => Self {
+                r#type: metadata_ref.r#type() as u8,
+                size: metadata_ref.size(),
+                ctime: metadata_ref.ctime().map(|x| x.get()).unwrap_or_default(),
+                mtime: metadata_ref.mtime().map(|x| x.get()).unwrap_or_default(),
+            },
+            None => Self {
                 r#type: 0,
                 size: -1,
                 ctime: 0,
                 mtime: 0,
-            }
+            },
         }
     }
 }
@@ -250,7 +240,7 @@ pub async fn search(
     }
 }
 
-// 获取节点信息 - 桩实现
+// 获取节点信息 - 完整实现
 #[napi]
 pub async fn get_nodes_info(
     slab_indices: Vec<u32>,
@@ -271,10 +261,25 @@ pub async fn get_nodes_info(
         )));
     }
 
-    // 暂时无法获取实际的节点信息，返回构造的空数据
-    let nodes = Vec::new();
+    // 获取搜索缓存
+    let search_cache_ref = match &state.search_cache {
+        Some(cache) => cache.clone(),
+        None => return Err(Error::from_reason("Search cache not initialized")),
+    };
 
-    let node_infos = nodes
+    // 转换索引类型
+    let slab_indices: Vec<search_cache::SlabIndex> = slab_indices
+        .into_iter()
+        .map(|idx| search_cache::SlabIndex::new(idx as usize))
+        .collect();
+
+    // 从缓存中获取节点信息 - 需要可变引用调用expand_file_nodes
+    let nodes = {
+        let mut cache = search_cache_ref.write().unwrap();
+        cache.expand_file_nodes(&slab_indices)
+    };
+
+    let node_infos: Vec<NodeInfo> = nodes
         .into_iter()
         .map(|SearchResultNode { path, metadata }| {
             let path_str = path.to_string_lossy().into_owned();
@@ -301,6 +306,7 @@ pub async fn get_nodes_info(
         })
         .collect();
 
+    hilog_debug!("Backend: get_nodes_info returned {} items", node_infos.len());
     Ok(node_infos)
 }
 
