@@ -1,8 +1,11 @@
+use base64::{Engine as _, engine::general_purpose};
+use fs_icon;
 use napi_derive_ohos::napi;
 use napi_ohos::{Error, Result};
 use once_cell::sync::{Lazy, OnceCell};
-use search_cache::{SearchCache, SearchOptions};
+use search_cache::{SearchCache, SearchOptions, SearchResultNode, SlabNodeMetadataCompact};
 use search_cancel::CancellationToken;
+use serde::Serialize;
 use std::{
     path::PathBuf,
     sync::{
@@ -16,6 +19,51 @@ use std::{
 static APP_QUIT: AtomicBool = AtomicBool::new(false);
 static DB_PATH: OnceCell<PathBuf> = OnceCell::new();
 static BACKEND_STATE: Lazy<RwLock<BackendState>> = Lazy::new(|| RwLock::new(BackendState::new()));
+
+// NodeInfo 结构体 - 与 Tauri 版本保持一致
+#[napi(object)]
+pub struct NodeInfo {
+    pub path: String,
+    pub metadata: Option<NodeInfoMetadata>,
+    pub icon: Option<String>,
+}
+
+#[napi(object)]
+pub struct NodeInfoMetadata {
+    pub r#type: u8,
+    pub size: i64,
+    pub ctime: u32,
+    pub mtime: u32,
+}
+
+impl NodeInfoMetadata {
+    fn from_metadata(metadata: &SlabNodeMetadataCompact) -> Self {
+        if metadata.is_some() {
+            if let Some(metadata_ref) = metadata.as_ref() {
+                Self {
+                    r#type: metadata_ref.r#type() as u8,
+                    size: metadata_ref.size(),
+                    ctime: metadata_ref.ctime().map(|x| x.get()).unwrap_or_default(),
+                    mtime: metadata_ref.mtime().map(|x| x.get()).unwrap_or_default(),
+                }
+            } else {
+                Self {
+                    r#type: 0,
+                    size: -1,
+                    ctime: 0,
+                    mtime: 0,
+                }
+            }
+        } else {
+            Self {
+                r#type: 0,
+                size: -1,
+                ctime: 0,
+                mtime: 0,
+            }
+        }
+    }
+}
 
 // 后端状态
 struct BackendState {
@@ -204,16 +252,55 @@ pub async fn search(
 
 // 获取节点信息 - 桩实现
 #[napi]
-pub async fn get_nodes_info(slab_indices: Vec<u32>) -> Result<Vec<String>> {
-    println!("Getting info for {} nodes", slab_indices.len());
+pub async fn get_nodes_info(
+    results: Vec<u32>,
+    include_icons: Option<bool>,
+) -> Result<Vec<NodeInfo>> {
+    if results.is_empty() {
+        return Ok(Vec::new());
+    }
 
-    // 桩实现返回模拟信息
-    let info: Vec<String> = slab_indices
-        .iter()
-        .map(|&idx| format!("Node {} info (stub)", idx))
+    let include_icons = include_icons.unwrap_or(true);
+    let state = BACKEND_STATE.read().unwrap();
+
+    if state.lifecycle_state != STATE_READY {
+        return Err(Error::from_reason(format!(
+            "Backend not ready. Current state: {}",
+            state_to_string(state.lifecycle_state)
+        )));
+    }
+
+    // 暂时无法获取实际的节点信息，返回构造的空数据
+    let nodes = Vec::new();
+
+    let node_infos = nodes
+        .into_iter()
+        .map(|SearchResultNode { path, metadata }| {
+            let path_str = path.to_string_lossy().into_owned();
+            
+            // 计算图标（如果需要）
+            let icon = if include_icons {
+                // 鸿蒙平台使用 fs-icon 库获取图标
+                match fs_icon::icon_of_path(&path_str) {
+                    Some(data) => Some(format!(
+                        "data:image/png;base64,{}",
+                        general_purpose::STANDARD.encode(&data)
+                    )),
+                    None => None,
+                }
+            } else {
+                None
+            };
+
+            NodeInfo {
+                path: path_str,
+                icon,
+                metadata: Some(NodeInfoMetadata::from_metadata(&metadata)),
+            }
+        })
         .collect();
 
-    Ok(info)
+    Ok(node_infos)
 }
 
 // 触发重新扫描 - 桩实现

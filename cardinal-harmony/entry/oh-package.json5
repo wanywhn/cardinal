@@ -6,5 +6,6 @@
   "author": "",
   "license": "",
   "dependencies": {
+    "libharmony_bindings.so": "file:./libs"
   }
 }

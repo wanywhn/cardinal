@@ -1,6 +1,6 @@
 {
-  "name": "libcardinal_ohos.so",
-  "types": "./index.d.ts",
-  "version": "1.0.0",
-  "description": "Please describe the basic information."
+  name: "libharmony_bindings.so",
+  types: "./index.d.ts",
+  version: "1.0.0",
+  description: "Please describe the basic information.",
 }

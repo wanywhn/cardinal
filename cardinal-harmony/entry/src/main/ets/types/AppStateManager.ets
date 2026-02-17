@@ -1,4 +1,4 @@
-import { searchService, SearchOptions } from './ffiInterface'
+import { searchService, SearchOptions, SearchService } from './ffiInterface'
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import App from '@system.app';
 
@@ -6,7 +6,7 @@ import App from '@system.app';
  * 应用级状态管理器
  * 使用ArkTS状态管理V2实现
  */
-// 定义搜索结果类型
+// 定义搜索结果类型（适配ArkUI渲染）
 @ObservedV2
 export class SearchResult {
   @Trace id: string = "";
@@ -24,16 +24,40 @@ export interface FileSystemEvent {
   path: string;
   time: string;
 }
+
+// 应用生命周期状态常量
+const STATE_UNINITIALIZED: number = 0;
+const STATE_INITIALIZING: number = 1;
+const STATE_INDEXING: number = 2;
+const STATE_READY: number = 3;
+const STATE_UPDATING: number = 4;
+const STATE_ERROR: number = 5;
+
+// 后端初始化配置
+const DEFAULT_WATCH_ROOT: string = "/data/storage/el1/bundle/files";
+const DEFAULT_IGNORE_PATHS: string[] = [
+  "node_modules",
+  ".git",
+  ".idea",
+  ".vscode",
+  "target",
+  "build",
+  "dist"
+];
+
 // 定义应用状态类型
 @ObservedV2
 export class AppState {
   @Trace public searchQuery: string = "";
   @Trace public caseSensitive: boolean = false;
   @Trace public isLoading: boolean = false;
+  @Trace public backendInitialized: boolean = false;
+  @Trace public backendStatus: string = STATE_UNINITIALIZED.toString();
   @Trace public searchResults: SearchResult[] = [];
   @Trace public fileSystemEvents: FileSystemEvent[] = [];
   @Trace public activeTab: number = 0; // 0 for files, 1 for events
 }
+
 /**
  * 应用状态管理类
  */
@@ -44,8 +68,14 @@ export class AppStateManager {
   // 观察者列表
   private observers: Array<(state: AppState) => void> = [];
 
+  // 后端初始化状态跟踪
+  private backendInitialized: boolean = false;
+
   // 私有构造函数，实现单例模式
-  private constructor() {}
+  private constructor() {
+    // 应用启动时延迟初始化后端
+    this.delayedInitializeBackend();
+  }
 
   // 获取单例实例
   public static getInstance(): AppStateManager {
@@ -75,7 +105,7 @@ export class AppStateManager {
 
   // 获取当前状态
   public getState(): AppState {
-    return this.state
+    return this.state;
   }
 
   // 更新搜索查询
@@ -93,6 +123,13 @@ export class AppStateManager {
   // 设置加载状态
   public setLoading(loading: boolean): void {
     this.state.isLoading = loading;
+    this.notify();
+  }
+
+  // 更新后端状态
+  public setBackendStatus(status: number): void {
+    this.state.backendStatus = status.toString();
+    this.state.backendInitialized = (status === STATE_READY);
     this.notify();
   }
 
@@ -116,26 +153,115 @@ export class AppStateManager {
   }
 
   /**
+   * 延迟初始化后端 - 在应用启动后异步执行
+   */
+  private async delayedInitializeBackend(): Promise<void> {
+    // 等待UI初始化完成
+    setTimeout(async () => {
+      await this.initializeBackend();
+    }, 1000); // 延迟1秒开始初始化
+  }
+
+  /**
+   * 初始化后端服务
+   */
+  public async initializeBackend(): Promise<void> {
+    if (this.backendInitialized) {
+      console.info("Backend already initialized");
+      return;
+    }
+
+    try {
+      this.setBackendStatus(STATE_INITIALIZING);
+      console.info("Initializing backend...");
+      
+      const status = await searchService.initializeBackend(
+        DEFAULT_WATCH_ROOT, 
+        DEFAULT_IGNORE_PATHS
+      );
+      
+      this.setBackendStatus(status);
+      
+      if (status === STATE_READY) {
+        this.backendInitialized = true;
+        console.info("Backend initialized successfully");
+        
+        // 后端初始化完成后，执行空的搜索以测试连接
+        // this.performSearch("");
+      } else {
+        console.info(`Backend initialization completed with status: ${status}`);
+      }
+    } catch (error) {
+      console.error(`Backend initialization failed:`, error);
+      this.setBackendStatus(STATE_ERROR);
+    }
+  }
+
+  /**
+   * 获取当前后端状态文本描述
+   */
+  public getBackendStatusText(): string {
+    switch (parseInt(this.state.backendStatus)) {
+      case STATE_UNINITIALIZED:
+        return "未初始化";
+      case STATE_INITIALIZING:
+        return "初始化中...";
+      case STATE_INDEXING:
+        return "索引构建中...";
+      case STATE_READY:
+        return "就绪";
+      case STATE_UPDATING:
+        return "更新中...";
+      case STATE_ERROR:
+        return "错误";
+      default:
+        return "未知状态";
+    }
+  }
+
+  /**
    * 执行搜索操作
    * 通过FFI调用原生搜索功能
    */
   public async performSearch(query: string): Promise<void> {
+    if (!this.backendInitialized) {
+      console.info("Backend not ready for search, ignoring request");
+      return;
+    }
+
     this.setLoading(true);
 
     try {
-      // 通过FFI调用原生搜索功能
       const searchOptions: SearchOptions = {
         query: query,
         caseSensitive: this.state.caseSensitive,
         maxResults: 100
       };
       
+      console.info(`Starting search for: "${query}"`);
       const results = await searchService.search(searchOptions);
+      console.info(`Search completed, found ${results.length} results`);
+      
       this.setSearchResults(results);
     } catch (error) {
       console.error("Search failed:", error);
-      // 设置错误状态或默认结果
       this.setSearchResults([]);
+    }
+  }
+
+  /**
+   * 触发重新扫描
+   */
+  public async triggerRescan(): Promise<void> {
+    try {
+      console.info("Triggering backend rescan...");
+      this.setBackendStatus(STATE_INDEXING);
+      await searchService.triggerRescan();
+      this.setBackendStatus(STATE_READY);
+      console.info("Rescan completed");
+    } catch (error) {
+      console.error("Rescan failed:", error);
+      this.setBackendStatus(STATE_ERROR);
     }
   }
 
@@ -144,23 +270,37 @@ export class AppStateManager {
    * 通过FFI调用原生事件监听功能
    */
   public startFileSystemEventListening(): void {
-    // 通过FFI调用原生事件监听功能
-    searchService.watchFileSystemEvents((event: FileSystemEvent) => {
-      // 将新事件添加到现有事件列表中，保持固定长度以优化Repeat组件性能
-      const updatedEvents = [event, ...this.state.fileSystemEvents];
-      // 限制事件数量以优化性能
-      if (updatedEvents.length > 1000) {
-        updatedEvents.length = 1000; // 只保留最新的1000个事件
-      }
-      this.state.fileSystemEvents = [...updatedEvents];
-      this.notify();
-    });
+    if (!this.backendInitialized) {
+      console.info("Backend not ready for event listening");
+      return;
+    }
+
   }
   
   /**
    * 停止文件系统事件监听
    */
   public stopFileSystemEventListening(): void {
-    searchService.stopWatchingFileSystemEvents();
+    try {
+      // searchService.stopWatchingFileSystemEvents();
+      console.info("File system event listening stopped");
+    } catch (error) {
+      console.error("Failed to stop file system event listening:", error);
+    }
+  }
+
+  /**
+   * 清理应用状态和资源
+   */
+  public async cleanup(): Promise<void> {
+    try {
+      this.stopFileSystemEventListening();
+      await searchService.cleanupBackend();
+      this.backendInitialized = false;
+      this.setBackendStatus(STATE_UNINITIALIZED);
+      console.info("Application cleanup completed");
+    } catch (error) {
+      console.error("Cleanup failed:", error);
+    }
   }
 }
