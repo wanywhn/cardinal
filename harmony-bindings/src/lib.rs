@@ -1,8 +1,10 @@
 use napi_derive_ohos::napi;
-use napi_ohos::{Error as NapiError, Result as NapiResult};
+use napi_ohos::{Error, Result};
 use once_cell::sync::{Lazy, OnceCell};
+use search_cache::{SearchCache, SearchOptions};
+use search_cancel::CancellationToken;
 use std::{
-    path::{Path, PathBuf},
+    path::PathBuf,
     sync::{
         atomic::{AtomicBool, Ordering},
         Arc, RwLock,
@@ -18,12 +20,16 @@ static BACKEND_STATE: Lazy<RwLock<BackendState>> = Lazy::new(|| RwLock::new(Back
 // 后端状态
 struct BackendState {
     lifecycle_state: u8,
+    search_cache: Option<Arc<RwLock<SearchCache>>>,
+    root_path: Option<PathBuf>,
 }
 
 impl BackendState {
     fn new() -> Self {
         Self {
             lifecycle_state: STATE_UNINITIALIZED,
+            search_cache: None,
+            root_path: None,
         }
     }
 }
@@ -41,7 +47,7 @@ pub const STATE_ERROR: u8 = 5;
 pub async fn initialize_harmony_backend(
     watch_root: String,
     ignore_paths: Vec<String>,
-) -> NapiResult<u8> {
+) -> Result<u8> {
     println!("Starting HarmonyOS backend initialization");
     update_lifecycle_state(STATE_INITIALIZING);
 
@@ -51,7 +57,7 @@ pub async fn initialize_harmony_backend(
 
     DB_PATH
         .set(db_path)
-        .map_err(|_| NapiError::from_reason("Failed to set DB path"))?;
+        .map_err(|_| Error::from_reason("Failed to set DB path"))?;
 
     println!(
         "Starting backend with watch_root: {}, ignore_paths: {}",
@@ -99,11 +105,11 @@ fn state_to_string(state: u8) -> &'static str {
 }
 
 // 运行逻辑线程
-fn run_logic_thread(watch_root: String, ignore_paths: Vec<String>) -> NapiResult<()> {
+fn run_logic_thread(watch_root: String, ignore_paths: Vec<String>) -> Result<()> {
     // 检查数据库路径
     let db_path = DB_PATH
         .get()
-        .ok_or_else(|| NapiError::from_reason("DB path not initialized"))?;
+        .ok_or_else(|| Error::from_reason("DB path not initialized"))?;
 
     println!(
         "Attempting to initialize backend with watch_root: {}",
@@ -112,27 +118,42 @@ fn run_logic_thread(watch_root: String, ignore_paths: Vec<String>) -> NapiResult
     println!("Database path: {:?}", db_path);
     println!("Ignore paths: {:?}", ignore_paths);
 
-    // 延迟一段时间模拟初始化过程
-    std::thread::sleep(Duration::from_secs(2));
+    // 构建搜索缓存
+    let watch_path = PathBuf::from(&watch_root);
+    let ignore_paths: Vec<PathBuf> = ignore_paths.iter().map(PathBuf::from).collect();
 
-    // 更新状态为READY
-    update_lifecycle_state(STATE_READY);
+    println!("Building search cache for path: {:?}", watch_path);
+
+    // 创建搜索缓存
+    let search_cache = SearchCache::walk_fs(&watch_path);
+    println!(
+        "Search cache built successfully. Total files: {}",
+        search_cache.get_total_files()
+    );
+
+    // 更新后端状态
+    {
+        let mut state = BACKEND_STATE.write().unwrap();
+        state.search_cache = Some(Arc::new(RwLock::new(search_cache)));
+        state.root_path = Some(watch_path);
+        state.lifecycle_state = STATE_READY;
+    }
 
     println!("HarmonyOS backend is ready");
     Ok(())
 }
 
-// 执行搜索 - 桩实现
+// 执行搜索 - 完整实现
 #[napi]
 pub async fn search(
     query: String,
     case_insensitive: Option<bool>,
     max_results: Option<u32>,
-) -> NapiResult<Vec<u32>> {
+) -> Result<Vec<u32>> {
     let state = BACKEND_STATE.read().unwrap();
 
     if state.lifecycle_state != STATE_READY {
-        return Err(NapiError::from_reason(format!(
+        return Err(Error::from_reason(format!(
             "Backend not ready. Current state: {}",
             state_to_string(state.lifecycle_state)
         )));
@@ -142,16 +163,48 @@ pub async fn search(
     println!("Case insensitive: {:?}", case_insensitive);
     println!("Max results: {:?}", max_results);
 
-    // 桩实现返回空结果
-    let results: Vec<u32> = vec![];
+    // 获取搜索缓存
+    let search_cache_ref = match &state.search_cache {
+        Some(cache) => cache.clone(),
+        None => return Err(Error::from_reason("Search cache not initialized")),
+    };
 
-    println!("Search returned {} results", results.len());
-    Ok(results)
+    // 配置搜索选项
+    let options = SearchOptions {
+        case_insensitive: case_insensitive.unwrap_or(false),
+    };
+
+    // 执行搜索
+    let cancellation_token = CancellationToken::noop();
+
+    // 提前获取写锁并执行搜索
+    let search_result = {
+        let mut cache_write = search_cache_ref.write().unwrap();
+        cache_write.search_with_options(&query, options, cancellation_token)
+    };
+
+    match search_result {
+        Ok(outcome) => {
+            let results: Vec<u32> = outcome
+                .nodes
+                .unwrap_or_default()
+                .into_iter()
+                .map(|idx| idx.get() as u32)
+                .collect();
+
+            println!("Search returned {} results", results.len());
+            Ok(results)
+        }
+        Err(e) => {
+            println!("Search error: {}", e);
+            Err(Error::from_reason(format!("Search failed: {}", e)))
+        }
+    }
 }
 
 // 获取节点信息 - 桩实现
 #[napi]
-pub async fn get_nodes_info(slab_indices: Vec<u32>) -> NapiResult<Vec<String>> {
+pub async fn get_nodes_info(slab_indices: Vec<u32>) -> Result<Vec<String>> {
     println!("Getting info for {} nodes", slab_indices.len());
 
     // 桩实现返回模拟信息
@@ -165,7 +218,7 @@ pub async fn get_nodes_info(slab_indices: Vec<u32>) -> NapiResult<Vec<String>> {
 
 // 触发重新扫描 - 桩实现
 #[napi]
-pub async fn trigger_rescan() -> NapiResult<()> {
+pub async fn trigger_rescan() -> Result<()> {
     println!("Triggering rescan");
     update_lifecycle_state(STATE_INDEXING);
 
@@ -179,24 +232,11 @@ pub async fn trigger_rescan() -> NapiResult<()> {
 
 // 清理后端
 #[napi]
-pub async fn cleanup_backend() -> NapiResult<()> {
+pub async fn cleanup_backend() -> Result<()> {
     println!("Cleaning up HarmonyOS backend");
     APP_QUIT.store(true, Ordering::Relaxed);
 
     update_lifecycle_state(STATE_UNINITIALIZED);
     println!("Backend cleanup completed");
     Ok(())
-}
-
-// 导出状态常量给TypeScript使用
-#[napi]
-pub fn get_state_constants() -> NapiResult<Vec<u8>> {
-    Ok(vec![
-        STATE_UNINITIALIZED,
-        STATE_INITIALIZING,
-        STATE_INDEXING,
-        STATE_READY,
-        STATE_UPDATING,
-        STATE_ERROR,
-    ])
 }
