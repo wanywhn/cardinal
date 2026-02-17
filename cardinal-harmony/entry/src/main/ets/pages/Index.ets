@@ -41,10 +41,7 @@ struct Index {
       // 标签页切换
       Tabs({ barPosition: BarPosition.Start }) {
         TabContent() {
-          FilesTab({
-            paramSearchQuery :this.currentState.searchQuery,
-            paramCaseSensitive:this.currentState.caseSensitive
-          })
+          FilesTab()
         }
         .tabBar("Files")
         TabContent() {
