@@ -10,7 +10,7 @@ import { EventsTab } from './EventsTab'
 @ComponentV2
 struct Index {
   private appState: AppStateManager = AppStateManager.getInstance()
-  private currentState: AppState = this.appState.getState()
+  @Local currentState: AppState = this.appState.getState()
   
   aboutToAppear(): void {
     // 订阅状态变化
@@ -28,9 +28,9 @@ struct Index {
       // 搜索栏
       SearchBar({
         queryChangeCallback: (query: string) => {
-          this.appState.setSearchQuery(query)
           // TODO: 实现搜索功能
           this.handleSearch(query)
+          this.appState.setSearchQuery(query)
         },
         toggleCaseSensitiveCallback: (value: boolean) => {
           if (value !== this.currentState.caseSensitive) {

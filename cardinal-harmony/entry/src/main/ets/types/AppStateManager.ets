@@ -1,16 +1,19 @@
 import { searchService, SearchOptions } from './ffiInterface'
+import { hilog } from '@kit.PerformanceAnalysisKit';
+import App from '@system.app';
 
 /**
  * 应用级状态管理器
  * 使用ArkTS状态管理V2实现
  */
 // 定义搜索结果类型
-export interface SearchResult {
-  id: string;
-  name: string;
-  path: string;
-  size: string;
-  modified: string;
+@ObservedV2
+export class SearchResult {
+  @Trace id: string = "";
+  @Trace name: string = "";
+  @Trace path: string = "";
+  @Trace size: string = "";
+  @Trace modified: string = "";
 }
 
 // 定义文件系统事件类型
@@ -22,27 +25,21 @@ export interface FileSystemEvent {
   time: string;
 }
 // 定义应用状态类型
-export interface AppState {
-  searchQuery: string;
-  caseSensitive: boolean;
-  isLoading: boolean;
-  searchResults: SearchResult[];
-  fileSystemEvents: FileSystemEvent[];
-  activeTab: number; // 0 for files, 1 for events
+@ObservedV2
+export class AppState {
+  @Trace public searchQuery: string = "";
+  @Trace public caseSensitive: boolean = false;
+  @Trace public isLoading: boolean = false;
+  @Trace public searchResults: SearchResult[] = [];
+  @Trace public fileSystemEvents: FileSystemEvent[] = [];
+  @Trace public activeTab: number = 0; // 0 for files, 1 for events
 }
 /**
  * 应用状态管理类
  */
 export class AppStateManager {
   private static instance: AppStateManager;
-  private state: AppState = {
-    searchQuery: "",
-    caseSensitive: false,
-    isLoading: false,
-    searchResults: [],
-    fileSystemEvents: [],
-    activeTab: 0
-  };
+  private state: AppState = new AppState()
 
   // 观察者列表
   private observers: Array<(state: AppState) => void> = [];
@@ -78,14 +75,7 @@ export class AppStateManager {
 
   // 获取当前状态
   public getState(): AppState {
-    return {
-      searchQuery: this.state.searchQuery,
-      caseSensitive: this.state.caseSensitive,
-      isLoading: this.state.isLoading,
-      searchResults: [...this.state.searchResults],
-      fileSystemEvents: [...this.state.fileSystemEvents],
-      activeTab: this.state.activeTab
-    }; // 返回副本以防止直接修改
+    return this.state
   }
 
   // 更新搜索查询

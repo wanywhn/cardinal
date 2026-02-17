@@ -1,12 +1,13 @@
 
 import { AppStateManager, AppState, SearchResult } from '../types/AppStateManager'
+
 /**
  * 文件标签页组件
  */
 @ComponentV2
 export struct FilesTab {
   private appState: AppStateManager = AppStateManager.getInstance()
-  @Local private currentState: AppState = this.appState.getState()
+  currentState: AppState = this.appState.getState()
 
   aboutToAppear(): void {
     // 订阅状态变化
@@ -17,7 +18,6 @@ export struct FilesTab {
   updateUI(state: AppState): void {
     // 当状态变化时更新UI
     this.currentState = state
-    console.info("FilesTab state updated")
   }
 
   @Builder
@@ -93,13 +93,6 @@ export struct FilesTab {
                 }
               }.border({ width: 1 })
             }).virtualScroll()
-          // ForEach(this.currentState.searchResults, (item: SearchResult, index?: number) => {
-          //   ListItem() {
-          //     ResultRow({
-          //       item:item,
-          //     })
-          //   }
-          // }, (item: SearchResult, index?: number) => index?.toString());
         }
         .cachedCount(10)
         .edgeEffect(EdgeEffect.Spring)
