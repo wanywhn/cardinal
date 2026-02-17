@@ -2,9 +2,8 @@
  * FFI接口定义 - 鸿蒙版Cardinal
  * 适配Rust后端接口，支持mock和实际后端切换
  */
-
 // Rust后端生成的原生接口（通过ohos-rs生成）
-import nativeBackend from '../../../../libs/index';
+import nativeBackend from 'libharmony_bindings.so';
 
 // 搜索参数接口
 export interface SearchOptions {
@@ -129,7 +128,7 @@ class RustSearchService implements SearchService {
       const caseInsensitive = !options.caseSensitive;
       const maxResults = options.maxResults || 100;
       
-      const slabIndices = await nativeBackend.search(options.query, caseInsensitive, maxResults);
+      const slabIndices : Array<number> = await nativeBackend.search(options.query, caseInsensitive, maxResults);
       console.info(`[Rust Backend] Search returned ${slabIndices.length} results`);
       
       // 获取节点详细信息
@@ -149,7 +148,8 @@ class RustSearchService implements SearchService {
     console.info(`[Rust Backend] Getting node info for ${slabIndices.length} indices`);
     
     try {
-      const nodeInfos = await nativeBackend.getNodesInfo(slabIndices, includeIcons);
+      const nodeInfos : Array<NodeInfo> = await nativeBackend.getNodesInfo(slabIndices, includeIcons);
+      console.info(`[Rust Backend] Got ${nodeInfos.length} nodes info`);
       return nodeInfos;
     } catch (error) {
       console.error(`[Rust Backend] Get nodes info error:`, error);
@@ -161,8 +161,8 @@ class RustSearchService implements SearchService {
     console.info(`[Rust Backend] Initializing backend with watch root: ${watchRoot}`);
     
     try {
-      const status = await nativeBackend.initializeHarmonyBackend(watchRoot, ignorePaths);
-      return status;
+      await nativeBackend.initializeHarmonyBackend(watchRoot, ignorePaths);
+      return 0;
     } catch (error) {
       console.error(`[Rust Backend] Initialize backend error:`, error);
       return -1;
@@ -331,5 +331,5 @@ class MockSearchService implements SearchService {
 
 // 导出搜索服务实例
 // 通过注释/解注释下面两行来切换后端实现
-// export const searchService: SearchService = new RustSearchService();
-export const searchService: SearchService = new MockSearchService();
+export const searchService: SearchService = new RustSearchService();
+// export const searchService: SearchService = new MockSearchService();

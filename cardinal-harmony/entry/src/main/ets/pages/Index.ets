@@ -75,7 +75,7 @@ struct Index {
       // 控制按钮
       this.ControlButtons()
     }
-    .height('95%')
+    .height('80%')
     .backgroundColor($r('app.color.main_background_color'))
   }
 
@@ -142,11 +142,6 @@ struct Index {
   @Builder
   ControlButtons() {
     Row({ space: 10 }) {
-      Button("初始化后端").onClick(()=>{
-        this.appState.initializeBackend()
-      })
-      .enabled(!this.currentState.backendInitialized)
-      
       Button("开始监听事件").onClick(()=>{
         this.appState.startFileSystemEventListening()
       })

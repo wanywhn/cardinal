@@ -34,7 +34,7 @@ const STATE_UPDATING: number = 4;
 const STATE_ERROR: number = 5;
 
 // 后端初始化配置
-const DEFAULT_WATCH_ROOT: string = "/data/storage/el1/bundle/files";
+const DEFAULT_WATCH_ROOT: string = "/data/app/el2/100/base/com.wanywhn.anything";
 const DEFAULT_IGNORE_PATHS: string[] = [
   "node_modules",
   ".git",
@@ -181,10 +181,12 @@ export class AppStateManager {
       );
       
       this.setBackendStatus(status);
-      
-      if (status === STATE_READY) {
-        this.backendInitialized = true;
-        console.info("Backend initialized successfully");
+
+      this.backendInitialized = true;
+      console.info("Backend initialized successfully");
+
+      if (status === STATE_INDEXING) {
+
         
         // 后端初始化完成后，执行空的搜索以测试连接
         // this.performSearch("");
