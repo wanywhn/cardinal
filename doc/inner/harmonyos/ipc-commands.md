@@ -60,14 +60,14 @@ export function search(
 
 ### 1. Search and Data Commands
 
-| Command              | Parameters                                             | Return Type              | Description                              | ArkTS Usage     |
-| -------------------- | ------------------------------------------------------ | ------------------------ | ---------------------------------------- | --------------- |
-| `search`             | `query: string`, `options: SearchOptionsPayload`       | `Promise<SearchResults>` | Execute search with cancellation support | SearchScreen    |
-| `getNodesInfo`       | `slabIndices: number[]`, `includeIcons: boolean`       | `Promise<NodeInfo[]>`    | Expand slab indices to full node info    | FileListView    |
-| `getSortedView`      | `slabIndices: number[]`, `sortState: SortStatePayload` | `Promise<SlabIndex[]>`   | Get sorted view of results               | SortableTable   |
-| `updateIconViewport` | `viewportId: number`, `slabIndices: number[]`          | `void`                   | Update visible items for icon prefetch   | VirtualizedList |
-| `triggerRescan`      | -                                                      | `Promise<void>`          | Force full filesystem rescan             | SettingsScreen  |
-| `setWatchConfig`     | `watchRoot: string`, `ignorePaths: string[]`           | `Promise<void>`          | Update watch configuration               | SettingsScreen  |
+| Command              | Parameters                                             | Return Type              | Description                              | ArkTS Usage    |
+| -------------------- | ------------------------------------------------------ | ------------------------ | ---------------------------------------- | -------------- |
+| `search`             | `query: string`, `options: SearchOptionsPayload`       | `Promise<SearchResults>` | Execute search with cancellation support | SearchScreen   |
+| `getNodesInfo`       | `slabIndices: number[]`, `includeIcons: boolean`       | `Promise<NodeInfo[]>`    | Expand slab indices to full node info    | FileListView   |
+| `getSortedView`      | `slabIndices: number[]`, `sortState: SortStatePayload` | `Promise<SlabIndex[]>`   | Get sorted view of results               | SortableTable  |
+| `updateIconViewport` | `viewportId: number`, `slabIndices: number[]`          | `void`                   | Update visible items for icon prefetch   | TODO           |
+| `triggerRescan`      | -                                                      | `Promise<void>`          | Force full filesystem rescan             | SettingsScreen |
+| `setWatchConfig`     | `watchRoot: string`, `ignorePaths: string[]`           | `Promise<void>`          | Update watch configuration               | SettingsScreen |
 
 ---
 
