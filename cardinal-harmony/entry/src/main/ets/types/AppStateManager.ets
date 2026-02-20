@@ -3,6 +3,7 @@ import { hilog } from '@kit.PerformanceAnalysisKit';
 import App from '@system.app';
 import { abilityAccessCtrl, bundleManager, Permissions } from '@kit.AbilityKit';
 import { Environment, fileUri } from '@kit.CoreFileKit';
+import { LifecycleState } from 'libharmony_bindings.so';
 
 /**
  * 应用级状态管理器
@@ -27,14 +28,6 @@ export interface FileSystemEvent {
   time: string;
 }
 
-// 应用生命周期状态常量
-const STATE_UNINITIALIZED: number = 0;
-const STATE_INITIALIZING: number = 1;
-const STATE_INDEXING: number = 2;
-const STATE_READY: number = 3;
-const STATE_UPDATING: number = 4;
-const STATE_ERROR: number = 5;
-
 // 后端初始化配置
 const DEFAULT_WATCH_ROOT: string = "/data/app/el2/100/base/com.wanywhn.anything";
 const DEFAULT_IGNORE_PATHS: string[] = [
@@ -54,7 +47,7 @@ export class AppState {
   @Trace public caseSensitive: boolean = false;
   @Trace public isLoading: boolean = false;
   @Trace public backendInitialized: boolean = false;
-  @Trace public backendStatus: string = STATE_UNINITIALIZED.toString();
+  @Trace public backendStatus: number = LifecycleState.Uninitialized;
   @Trace public searchResults: SearchResult[] = [];
   @Trace public fileSystemEvents: FileSystemEvent[] = [];
   @Trace public activeTab: number = 0; // 0 for files, 1 for events
@@ -129,9 +122,9 @@ export class AppStateManager {
   }
 
   // 更新后端状态
-  public setBackendStatus(status: number): void {
-    this.state.backendStatus = status.toString();
-    this.state.backendInitialized = (status === STATE_READY);
+  public setBackendStatus(status: LifecycleState): void {
+    this.state.backendStatus = status;
+    this.state.backendInitialized = (status === LifecycleState.Ready);
     this.notify();
   }
 
@@ -174,7 +167,7 @@ export class AppStateManager {
     }
 
     try {
-      this.setBackendStatus(STATE_INITIALIZING);
+      this.setBackendStatus(LifecycleState.Initializing);
       console.info("Initializing backend...");
 
       if (!canIUse('SystemCapability.FileManagement.File.Environment.FolderObtain')) {
@@ -191,23 +184,21 @@ export class AppStateManager {
         "/storage/Users/currentUser",
         DEFAULT_IGNORE_PATHS
       );
-      
+
       this.setBackendStatus(status);
 
       this.backendInitialized = true;
       console.info("Backend initialized successfully");
 
-      if (status === STATE_INDEXING) {
-
-        
+      if (status === LifecycleState.Indexing) {
         // 后端初始化完成后，执行空的搜索以测试连接
-        // this.performSearch("");
+        this.performSearch("");
       } else {
         console.info(`Backend initialization completed with status: ${status}`);
       }
     } catch (error) {
       console.error(`Backend initialization failed:`, error);
-      this.setBackendStatus(STATE_ERROR);
+      this.setBackendStatus(LifecycleState.Error);
     }
   }
 
@@ -215,18 +206,18 @@ export class AppStateManager {
    * 获取当前后端状态文本描述
    */
   public getBackendStatusText(): string {
-    switch (parseInt(this.state.backendStatus)) {
-      case STATE_UNINITIALIZED:
+    switch (this.state.backendStatus) {
+      case LifecycleState.Uninitialized:
         return "未初始化";
-      case STATE_INITIALIZING:
+      case LifecycleState.Initializing:
         return "初始化中...";
-      case STATE_INDEXING:
+      case LifecycleState.Indexing:
         return "索引构建中...";
-      case STATE_READY:
+      case LifecycleState.Ready:
         return "就绪";
-      case STATE_UPDATING:
+      case LifecycleState.Updating:
         return "更新中...";
-      case STATE_ERROR:
+      case LifecycleState.Error:
         return "错误";
       default:
         return "未知状态";
@@ -269,13 +260,13 @@ export class AppStateManager {
   public async triggerRescan(): Promise<void> {
     try {
       console.info("Triggering backend rescan...");
-      this.setBackendStatus(STATE_INDEXING);
+      this.setBackendStatus(LifecycleState.Indexing);
       await searchService.triggerRescan();
-      this.setBackendStatus(STATE_READY);
+      this.setBackendStatus(LifecycleState.Ready);
       console.info("Rescan completed");
     } catch (error) {
       console.error("Rescan failed:", error);
-      this.setBackendStatus(STATE_ERROR);
+      this.setBackendStatus(LifecycleState.Error);
     }
   }
 
@@ -311,7 +302,7 @@ export class AppStateManager {
       this.stopFileSystemEventListening();
       await searchService.cleanupBackend();
       this.backendInitialized = false;
-      this.setBackendStatus(STATE_UNINITIALIZED);
+      this.setBackendStatus(LifecycleState.Uninitialized);
       console.info("Application cleanup completed");
     } catch (error) {
       console.error("Cleanup failed:", error);
@@ -352,7 +343,7 @@ async function checkPermissions(): Promise<void> {
     // 已经授权，可以继续访问目标操作
     console.info(`permission is granted.`);
   } else {
-    // 未授权，引导用户跳转到系统应用“设置”中进行授权
+    // TODO 未授权，引导用户跳转到系统应用“设置”中进行授权
     console.info(`permission is not granted.`);
   }
 }

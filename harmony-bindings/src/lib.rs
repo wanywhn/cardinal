@@ -57,9 +57,51 @@ impl NodeInfoMetadata {
     }
 }
 
+// 生命周期状态
+#[napi]
+#[repr(u8)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LifecycleState {
+    Uninitialized = 0,
+    Initializing = 1,
+    Indexing = 2,
+    Ready = 3,
+    Updating = 4,
+    Error = 5,
+}
+
+impl LifecycleState {
+    fn as_u8(self) -> u8 {
+        self as u8
+    }
+
+    fn from_u8(value: u8) -> Self {
+        match value {
+            0 => LifecycleState::Uninitialized,
+            1 => LifecycleState::Initializing,
+            2 => LifecycleState::Indexing,
+            3 => LifecycleState::Ready,
+            4 => LifecycleState::Updating,
+            5 => LifecycleState::Error,
+            _ => LifecycleState::Uninitialized,
+        }
+    }
+
+    fn to_str(self) -> &'static str {
+        match self {
+            LifecycleState::Uninitialized => "UNINITIALIZED",
+            LifecycleState::Initializing => "INITIALIZING",
+            LifecycleState::Indexing => "INDEXING",
+            LifecycleState::Ready => "READY",
+            LifecycleState::Updating => "UPDATING",
+            LifecycleState::Error => "ERROR",
+        }
+    }
+}
+
 // 后端状态
 struct BackendState {
-    lifecycle_state: u8,
+    lifecycle_state: LifecycleState,
     search_cache: Option<Arc<RwLock<SearchCache>>>,
     root_path: Option<PathBuf>,
 }
@@ -67,29 +109,21 @@ struct BackendState {
 impl BackendState {
     fn new() -> Self {
         Self {
-            lifecycle_state: STATE_UNINITIALIZED,
+            lifecycle_state: LifecycleState::Uninitialized,
             search_cache: None,
             root_path: None,
         }
     }
 }
 
-// 生命周期状态常量
-pub const STATE_UNINITIALIZED: u8 = 0;
-pub const STATE_INITIALIZING: u8 = 1;
-pub const STATE_INDEXING: u8 = 2;
-pub const STATE_READY: u8 = 3;
-pub const STATE_UPDATING: u8 = 4;
-pub const STATE_ERROR: u8 = 5;
-
 // 鸿蒙后端初始化主函数
 #[napi]
 pub async fn initialize_harmony_backend(
     watch_root: String,
     ignore_paths: Vec<String>,
-) -> Result<u8> {
+) -> Result<LifecycleState> {
     hilog_debug!("Backend: Starting HarmonyOS backend initialization");
-    update_lifecycle_state(STATE_INITIALIZING);
+    update_lifecycle_state(LifecycleState::Initializing);
 
     // 初始化数据库路径
     let db_path = PathBuf::from("com.wanywhn.anything/data/storage/el2/cardinal.db");
@@ -109,39 +143,26 @@ pub async fn initialize_harmony_backend(
     tokio::task::spawn_blocking(move || {
         if let Err(e) = run_logic_thread(root_path, ignore_paths) {
             hilog_debug!("Backend: Logic thread failed: {}", e);
-            update_lifecycle_state(STATE_ERROR);
+            update_lifecycle_state(LifecycleState::Error);
         }
     });
 
     // 立即返回索引中状态
-    update_lifecycle_state(STATE_INDEXING);
-    Ok(STATE_INDEXING)
+    update_lifecycle_state(LifecycleState::Indexing);
+    Ok(LifecycleState::Indexing)
 }
 
 // 获取应用状态
 #[napi]
 pub fn get_app_status() -> u8 {
-    BACKEND_STATE.read().unwrap().lifecycle_state
+    BACKEND_STATE.read().unwrap().lifecycle_state.as_u8()
 }
 
 // 更新生命周期状态
-fn update_lifecycle_state(new_state: u8) {
+fn update_lifecycle_state(new_state: LifecycleState) {
     let mut state = BACKEND_STATE.write().unwrap();
     state.lifecycle_state = new_state;
-    println!("Lifecycle state changed to: {}", state_to_string(new_state));
-}
-
-// 状态到字符串转换
-fn state_to_string(state: u8) -> &'static str {
-    match state {
-        STATE_UNINITIALIZED => "UNINITIALIZED",
-        STATE_INITIALIZING => "INITIALIZING",
-        STATE_INDEXING => "INDEXING",
-        STATE_READY => "READY",
-        STATE_UPDATING => "UPDATING",
-        STATE_ERROR => "ERROR",
-        _ => "UNKNOWN",
-    }
+    println!("Lifecycle state changed to: {}", new_state.to_str());
 }
 
 // 运行逻辑线程
@@ -176,7 +197,7 @@ fn run_logic_thread(watch_root: String, ignore_paths: Vec<String>) -> Result<()>
         let mut state = BACKEND_STATE.write().unwrap();
         state.search_cache = Some(Arc::new(RwLock::new(search_cache)));
         state.root_path = Some(watch_path);
-        state.lifecycle_state = STATE_READY;
+        state.lifecycle_state = LifecycleState::Ready;
     }
 
     hilog_debug!("Backend: HarmonyOS backend is ready");
@@ -192,10 +213,10 @@ pub async fn search(
 ) -> Result<Vec<u32>> {
     let state = BACKEND_STATE.read().unwrap();
 
-    if state.lifecycle_state != STATE_READY {
+    if state.lifecycle_state != LifecycleState::Ready {
         return Err(Error::from_reason(format!(
             "Backend not ready. Current state: {}",
-            state_to_string(state.lifecycle_state)
+            state.lifecycle_state.to_str()
         )));
     }
 
@@ -256,10 +277,10 @@ pub async fn get_nodes_info(
     let include_icons = include_icons.unwrap_or(true);
     let state = BACKEND_STATE.read().unwrap();
 
-    if state.lifecycle_state != STATE_READY {
+    if state.lifecycle_state != LifecycleState::Ready {
         return Err(Error::from_reason(format!(
             "Backend not ready. Current state: {}",
-            state_to_string(state.lifecycle_state)
+            state.lifecycle_state.to_str()
         )));
     }
 
@@ -319,12 +340,12 @@ pub async fn get_nodes_info(
 #[napi]
 pub async fn trigger_rescan() -> Result<()> {
     println!("Triggering rescan");
-    update_lifecycle_state(STATE_INDEXING);
+    update_lifecycle_state(LifecycleState::Indexing);
 
     // 延迟模拟重建索引过程
     tokio::time::sleep(Duration::from_secs(2)).await;
 
-    update_lifecycle_state(STATE_READY);
+    update_lifecycle_state(LifecycleState::Ready);
     println!("Rescan completed");
     Ok(())
 }
@@ -335,7 +356,7 @@ pub async fn cleanup_backend() -> Result<()> {
     println!("Cleaning up HarmonyOS backend");
     APP_QUIT.store(true, Ordering::Relaxed);
 
-    update_lifecycle_state(STATE_UNINITIALIZED);
+    update_lifecycle_state(LifecycleState::Uninitialized);
     println!("Backend cleanup completed");
     Ok(())
 }

@@ -3,7 +3,7 @@
  * 适配Rust后端接口，支持mock和实际后端切换
  */
 // Rust后端生成的原生接口（通过ohos-rs生成）
-import nativeBackend from 'libharmony_bindings.so';
+import nativeBackend, { LifecycleState } from 'libharmony_bindings.so';
 
 // 搜索参数接口
 export interface SearchOptions {
@@ -68,7 +68,7 @@ export interface SearchService {
    * @param ignorePaths 忽略路径数组
    * @returns 初始化状态代码
    */
-  initializeBackend(watchRoot: string, ignorePaths: string[]): Promise<number>;
+  initializeBackend(watchRoot: string, ignorePaths: string[]): Promise<LifecycleState>;
   
   /**
    * 获取应用状态
@@ -157,16 +157,9 @@ class RustSearchService implements SearchService {
     }
   }
   
-  async initializeBackend(watchRoot: string, ignorePaths: string[]): Promise<number> {
+  async initializeBackend(watchRoot: string, ignorePaths: string[]): Promise<LifecycleState> {
     console.info(`[Rust Backend] Initializing backend with watch root: ${watchRoot}`);
-    
-    try {
-      await nativeBackend.initializeHarmonyBackend(watchRoot, ignorePaths);
-      return 0;
-    } catch (error) {
-      console.error(`[Rust Backend] Initialize backend error:`, error);
-      return -1;
-    }
+    return await nativeBackend.initializeHarmonyBackend(watchRoot, ignorePaths);
   }
   
   getAppStatus(): number {
@@ -275,13 +268,13 @@ class MockSearchService implements SearchService {
     return nodeInfos;
   }
   
-  async initializeBackend(watchRoot: string, ignorePaths: string[]): Promise<number> {
+  async initializeBackend(watchRoot: string, ignorePaths: string[]): Promise<LifecycleState> {
     console.info(`[FFI MOCK] Initializing mock backend`);
-    return Promise.resolve(3); // READY状态
+    return Promise.resolve(LifecycleState.Ready); // READY状态
   }
   
   getAppStatus(): number {
-    return 3; // READY状态
+    return LifecycleState.Ready; // READY状态
   }
   
   async triggerRescan(): Promise<void> {
