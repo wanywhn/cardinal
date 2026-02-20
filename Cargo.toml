@@ -13,4 +13,4 @@ members = [
   "search-cancel",
   "slab-mmap",
 ]
-exclude = ["cardinal"]
+exclude = ["cardinal", "harmony-bindings"]

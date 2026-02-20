@@ -1,4 +1,3 @@
-
 import { AppStateManager, AppState, SearchResult } from '../types/AppStateManager'
 
 /**
@@ -30,10 +29,11 @@ export struct FilesTab {
         .margin({ right: 10 })
 
       // 文件信息列
-      Column({ space: 2 }) {
+      // Column({ space: 2 }) {
         // 文件名
         Text(ri.item.name)
           .fontSize(16)
+          .fontColor($r('app.color.text_secondary_color'))
           .fontWeight(FontWeight.Medium)
           .maxLines(1)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
@@ -44,20 +44,22 @@ export struct FilesTab {
           .fontColor($r('app.color.text_secondary_color'))
           .maxLines(1)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
-      }
-      .layoutWeight(1)
+          .layoutWeight(1)
+      // }
+      // .layoutWeight(1)
 
       // 文件大小和修改时间
-      Column({ space: 2 }) {
+      // Column({ space: 2 }) {
         Text(ri.item.size)
           .fontSize(14)
+          .fontColor($r('app.color.text_secondary_color'))
           .alignSelf(ItemAlign.End)
 
         Text(ri.item.modified)
           .fontSize(12)
           .fontColor($r('app.color.text_secondary_color'))
           .alignSelf(ItemAlign.End)
-      }
+      // }
     }
     .padding({ top: 8, bottom: 8, left: 16, right: 16 })
     .width('100%')

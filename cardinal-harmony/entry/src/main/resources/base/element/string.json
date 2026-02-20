@@ -11,6 +11,10 @@
     {
       "name": "EntryAbility_label",
       "value": "label"
+    },
+    {
+      "name": "approximately_full_disk_permission_reason",
+      "value": "读取文件"
     }
   ]
 }

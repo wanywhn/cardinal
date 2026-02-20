@@ -1,6 +1,8 @@
 import { searchService, SearchOptions, SearchService } from './ffiInterface'
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import App from '@system.app';
+import { abilityAccessCtrl, bundleManager, Permissions } from '@kit.AbilityKit';
+import { Environment, fileUri } from '@kit.CoreFileKit';
 
 /**
  * 应用级状态管理器
@@ -9,11 +11,11 @@ import App from '@system.app';
 // 定义搜索结果类型（适配ArkUI渲染）
 @ObservedV2
 export class SearchResult {
-  @Trace id: string = "";
-  @Trace name: string = "";
-  @Trace path: string = "";
-  @Trace size: string = "";
-  @Trace modified: string = "";
+  @Trace id: string = "1";
+  @Trace name: string = "2";
+  @Trace path: string = "3";
+  @Trace size: string = "4";
+  @Trace modified: string = "5";
 }
 
 // 定义文件系统事件类型
@@ -174,9 +176,19 @@ export class AppStateManager {
     try {
       this.setBackendStatus(STATE_INITIALIZING);
       console.info("Initializing backend...");
-      
+
+      if (!canIUse('SystemCapability.FileManagement.File.Environment.FolderObtain')) {
+        console.error('this api is not supported on this device');
+        // return;
+      }
+
+      await checkPermissions()
+      const docuri = Environment.getUserDocumentDir();
+      console.info(`docuri is ${docuri}`)
       const status = await searchService.initializeBackend(
-        DEFAULT_WATCH_ROOT, 
+        // DEFAULT_WATCH_ROOT,
+        // docuri,
+        "/storage/Users/currentUser",
         DEFAULT_IGNORE_PATHS
       );
       
@@ -304,5 +316,43 @@ export class AppStateManager {
     } catch (error) {
       console.error("Cleanup failed:", error);
     }
+  }
+}
+
+async function checkPermissionGrant(permission: Permissions): Promise<abilityAccessCtrl.GrantStatus> {
+  let atManager: abilityAccessCtrl.AtManager = abilityAccessCtrl.createAtManager();
+  let grantStatus: abilityAccessCtrl.GrantStatus = abilityAccessCtrl.GrantStatus.PERMISSION_DENIED;
+
+  // 获取应用程序的accessTokenID
+  let tokenId: number = 0;
+  try {
+    let bundleInfo: bundleManager.BundleInfo =
+      await bundleManager.getBundleInfoForSelf(bundleManager.BundleFlag.GET_BUNDLE_INFO_WITH_APPLICATION);
+    let appInfo: bundleManager.ApplicationInfo = bundleInfo.appInfo;
+    tokenId = appInfo.accessTokenId;
+  } catch (error) {
+    const err: BusinessError = error as BusinessError;
+    console.error(`Failed to get bundle info for self, code: ${err.code}, message: ${err.message}`);
+  }
+
+  // 校验应用是否被授予权限
+  try {
+    grantStatus = await atManager.checkAccessToken(tokenId, permission);
+  } catch (error) {
+    const err: BusinessError = error as BusinessError;
+    console.error(`Failed to check access token, code: ${err.code}, message: ${err.message}`);
+  }
+
+  return grantStatus;
+}
+
+async function checkPermissions(): Promise<void> {
+  let grantStatus: boolean = await checkPermissionGrant('ohos.permission.READ_WRITE_DOCUMENTS_DIRECTORY') === abilityAccessCtrl.GrantStatus.PERMISSION_GRANTED;// 获取拦截键盘输入事件权限状态。
+  if (grantStatus) {
+    // 已经授权，可以继续访问目标操作
+    console.info(`permission is granted.`);
+  } else {
+    // 未授权，引导用户跳转到系统应用“设置”中进行授权
+    console.info(`permission is not granted.`);
   }
 }
