@@ -2,6 +2,7 @@ use base64::{engine::general_purpose, Engine as _};
 use fs_icon;
 use napi_derive_ohos::napi;
 use napi_ohos::{Error, Result};
+use ohos_fileuri_binding::get_path_from_uri;
 use ohos_hilog_binding::hilog_debug;
 use once_cell::sync::{Lazy, OnceCell};
 use search_cache::{SearchCache, SearchOptions, SearchResultNode, SlabNodeMetadataCompact};
@@ -102,10 +103,11 @@ pub async fn initialize_harmony_backend(
         watch_root,
         ignore_paths.len()
     );
-
+    let root_path = get_path_from_uri(&watch_root).unwrap();
+    hilog_debug!("Backend: Root path: {:?}", root_path);
     // 在异步任务中运行逻辑线程
     tokio::task::spawn_blocking(move || {
-        if let Err(e) = run_logic_thread(watch_root, ignore_paths) {
+        if let Err(e) = run_logic_thread(root_path, ignore_paths) {
             hilog_debug!("Backend: Logic thread failed: {}", e);
             update_lifecycle_state(STATE_ERROR);
         }
@@ -306,7 +308,10 @@ pub async fn get_nodes_info(
         })
         .collect();
 
-    hilog_debug!("Backend: get_nodes_info returned {} items", node_infos.len());
+    hilog_debug!(
+        "Backend: get_nodes_info returned {} items",
+        node_infos.len()
+    );
     Ok(node_infos)
 }
 
