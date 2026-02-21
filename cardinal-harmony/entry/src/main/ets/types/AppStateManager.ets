@@ -178,24 +178,17 @@ export class AppStateManager {
       await checkPermissions()
       const docuri = Environment.getUserDocumentDir();
       console.info(`docuri is ${docuri}`)
+
+
+      const bind_func = (err: Error | null, arg: LifecycleState): void => this.setBackendStatus(arg);
+
       const status = await searchService.initializeBackend(
         // DEFAULT_WATCH_ROOT,
         // docuri,
         "/storage/Users/currentUser",
-        DEFAULT_IGNORE_PATHS
+        DEFAULT_IGNORE_PATHS,
+        bind_func
       );
-
-      this.setBackendStatus(status);
-
-      this.backendInitialized = true;
-      console.info("Backend initialized successfully");
-
-      if (status === LifecycleState.Indexing) {
-        // 后端初始化完成后，执行空的搜索以测试连接
-        this.performSearch("");
-      } else {
-        console.info(`Backend initialization completed with status: ${status}`);
-      }
     } catch (error) {
       console.error(`Backend initialization failed:`, error);
       this.setBackendStatus(LifecycleState.Error);

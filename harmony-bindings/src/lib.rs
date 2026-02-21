@@ -2,6 +2,10 @@ use base64::{engine::general_purpose, Engine as _};
 use fs_icon;
 use napi_derive_ohos::napi;
 use napi_ohos::{Error, Result};
+use napi_ohos::{
+    threadsafe_function::{ThreadsafeFunction, ThreadsafeFunctionCallMode},
+    Env,
+};
 use ohos_fileuri_binding::get_path_from_uri;
 use ohos_hilog_binding::hilog_debug;
 use once_cell::sync::{Lazy, OnceCell};
@@ -16,6 +20,7 @@ use std::{
     },
     time::Duration,
 };
+use std::ffi::c_void;
 
 // 全局状态
 static APP_QUIT: AtomicBool = AtomicBool::new(false);
@@ -104,6 +109,7 @@ struct BackendState {
     lifecycle_state: LifecycleState,
     search_cache: Option<Arc<RwLock<SearchCache>>>,
     root_path: Option<PathBuf>,
+    func_set_state: Option<ThreadsafeFunction<LifecycleState, ()>>
 }
 
 impl BackendState {
@@ -112,7 +118,25 @@ impl BackendState {
             lifecycle_state: LifecycleState::Uninitialized,
             search_cache: None,
             root_path: None,
+            func_set_state: None,
         }
+    }
+
+    pub fn set_lifecycle_state(&mut self, lifecycle_state: LifecycleState) {
+        self.lifecycle_state = lifecycle_state;
+        if let Some(func_mtd) = &self.func_set_state {
+            func_mtd.call_with_return_value(
+                Ok(self.lifecycle_state),
+                ThreadsafeFunctionCallMode::NonBlocking,
+                |result, env| {
+                    Ok(())
+                }
+            );
+        }
+    }
+
+    pub fn set_func_set_state(&mut self, func_set_state: Option<ThreadsafeFunction<LifecycleState, ()>>) {
+        self.func_set_state = func_set_state;
     }
 }
 
@@ -121,8 +145,10 @@ impl BackendState {
 pub async fn initialize_harmony_backend(
     watch_root: String,
     ignore_paths: Vec<String>,
+    func_set_state: ThreadsafeFunction<LifecycleState, ()>
 ) -> Result<LifecycleState> {
     hilog_debug!("Backend: Starting HarmonyOS backend initialization");
+    BACKEND_STATE.write().unwrap().set_func_set_state(Some(func_set_state));
     update_lifecycle_state(LifecycleState::Initializing);
 
     // 初始化数据库路径
@@ -139,6 +165,10 @@ pub async fn initialize_harmony_backend(
     );
     let root_path = get_path_from_uri(&watch_root).unwrap();
     hilog_debug!("Backend: Root path: {:?}", root_path);
+
+    // 立即返回索引中状态
+    update_lifecycle_state(LifecycleState::Indexing);
+
     // 在异步任务中运行逻辑线程
     tokio::task::spawn_blocking(move || {
         if let Err(e) = run_logic_thread(root_path, ignore_paths) {
@@ -147,21 +177,13 @@ pub async fn initialize_harmony_backend(
         }
     });
 
-    // 立即返回索引中状态
-    update_lifecycle_state(LifecycleState::Indexing);
     Ok(LifecycleState::Indexing)
-}
-
-// 获取应用状态
-#[napi]
-pub fn get_app_status() -> u8 {
-    BACKEND_STATE.read().unwrap().lifecycle_state.as_u8()
 }
 
 // 更新生命周期状态
 fn update_lifecycle_state(new_state: LifecycleState) {
     let mut state = BACKEND_STATE.write().unwrap();
-    state.lifecycle_state = new_state;
+    state.set_lifecycle_state(new_state);
     println!("Lifecycle state changed to: {}", new_state.to_str());
 }
 
@@ -197,7 +219,7 @@ fn run_logic_thread(watch_root: String, ignore_paths: Vec<String>) -> Result<()>
         let mut state = BACKEND_STATE.write().unwrap();
         state.search_cache = Some(Arc::new(RwLock::new(search_cache)));
         state.root_path = Some(watch_path);
-        state.lifecycle_state = LifecycleState::Ready;
+        state.set_lifecycle_state(LifecycleState::Ready);
     }
 
     hilog_debug!("Backend: HarmonyOS backend is ready");

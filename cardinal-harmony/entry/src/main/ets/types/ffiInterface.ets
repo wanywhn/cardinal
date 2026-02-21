@@ -68,14 +68,8 @@ export interface SearchService {
    * @param ignorePaths 忽略路径数组
    * @returns 初始化状态代码
    */
-  initializeBackend(watchRoot: string, ignorePaths: string[]): Promise<LifecycleState>;
-  
-  /**
-   * 获取应用状态
-   * @returns 应用状态代码
-   */
-  getAppStatus(): number;
-  
+  initializeBackend(watchRoot: string, ignorePaths: string[], funcSetState: ((err: Error | null, arg: LifecycleState) => void)): Promise<LifecycleState>;
+
   /**
    * 触发重新扫描
    */
@@ -157,15 +151,11 @@ class RustSearchService implements SearchService {
     }
   }
   
-  async initializeBackend(watchRoot: string, ignorePaths: string[]): Promise<LifecycleState> {
+  async initializeBackend(watchRoot: string, ignorePaths: string[], funcSetState: ((err: Error | null, arg: LifecycleState) => void)): Promise<LifecycleState> {
     console.info(`[Rust Backend] Initializing backend with watch root: ${watchRoot}`);
-    return await nativeBackend.initializeHarmonyBackend(watchRoot, ignorePaths);
+    return await nativeBackend.initializeHarmonyBackend(watchRoot, ignorePaths, funcSetState);
   }
-  
-  getAppStatus(): number {
-    return nativeBackend.getAppStatus();
-  }
-  
+
   async triggerRescan(): Promise<void> {
     console.info(`[Rust Backend] Triggering rescan`);
     
@@ -268,15 +258,11 @@ class MockSearchService implements SearchService {
     return nodeInfos;
   }
   
-  async initializeBackend(watchRoot: string, ignorePaths: string[]): Promise<LifecycleState> {
+  async initializeBackend(watchRoot: string, ignorePaths: string[], funcSetState: ((err: Error | null, arg: LifecycleState) => void)): Promise<LifecycleState> {
     console.info(`[FFI MOCK] Initializing mock backend`);
     return Promise.resolve(LifecycleState.Ready); // READY状态
   }
-  
-  getAppStatus(): number {
-    return LifecycleState.Ready; // READY状态
-  }
-  
+
   async triggerRescan(): Promise<void> {
     console.info("[FFI MOCK] Triggering mock rescan");
     return Promise.resolve();
