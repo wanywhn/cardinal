@@ -3,27 +3,13 @@
  * 适配Rust后端接口，支持mock和实际后端切换
  */
 // Rust后端生成的原生接口（通过ohos-rs生成）
-import nativeBackend, { LifecycleState } from 'libharmony_bindings.so';
+import nativeBackend, { LifecycleState, NodeInfo } from 'libharmony_bindings.so';
 
 // 搜索参数接口
 export interface SearchOptions {
   query: string;
   caseSensitive?: boolean;
   maxResults?: number;
-}
-
-// 节点信息接口（与Rust后端NodeInfo保持一致）
-export interface NodeInfo {
-  path: string;
-  metadata?: NodeInfoMetadata;
-  icon?: string;
-}
-
-export interface NodeInfoMetadata {
-  type: number;
-  size: number;
-  ctime: number;
-  mtime: number;
 }
 
 // 适配前端显示的结果接口
@@ -52,7 +38,7 @@ export interface SearchService {
    * @param options 搜索选项
    * @returns 搜索结果数组
    */
-  search(options: SearchOptions): Promise<SearchResult[]>;
+  search(options: SearchOptions): Promise<NodeInfo[]>;
   
   /**
    * 获取节点详细信息
@@ -81,40 +67,11 @@ export interface SearchService {
   cleanupBackend(): Promise<void>;
 }
 
-// 辅助函数：将NodeInfo转换为SearchResult
-function nodeInfoToSearchResult(nodeInfo: NodeInfo, index: number): SearchResult {
-  const fileName = nodeInfo.path.split('/').pop() || 'unknown';
-  const fileSize = nodeInfo.metadata?.size !== undefined ? formatFileSize(nodeInfo.metadata.size) : '-';
-  const modifiedTime = nodeInfo.metadata?.mtime ? formatTimestamp(nodeInfo.metadata.mtime) : 'Unknown';
-  
-  return {
-    id: `${index}_${nodeInfo.path}`,
-    name: fileName,
-    path: nodeInfo.path,
-    size: fileSize,
-    modified: modifiedTime
-  };
-}
-
-// 辅助函数：格式化文件大小
-function formatFileSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-  return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
-}
-
-// 辅助函数：格式化时间戳
-function formatTimestamp(timestamp: number): string {
-  const date = new Date(timestamp * 1000); // Rust后端使用秒级时间戳
-  return date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
-}
-
 /**
  * 实际Rust后端搜索服务实现
  */
 class RustSearchService implements SearchService {
-  async search(options: SearchOptions): Promise<SearchResult[]> {
+  async search(options: SearchOptions): Promise<NodeInfo[]> {
     console.info(`[Rust Backend] Searching for: ${options.query}`);
     
     try {
@@ -128,7 +85,7 @@ class RustSearchService implements SearchService {
       // 获取节点详细信息
       if (slabIndices.length > 0) {
         const nodeInfos = await this.getNodesInfo(slabIndices, true);
-        return nodeInfos.map((nodeInfo, index) => nodeInfoToSearchResult(nodeInfo, index));
+        return nodeInfos
       }
       
       return [];
@@ -213,7 +170,7 @@ class RustSearchService implements SearchService {
  * 模拟搜索服务实现（保留用于测试和后端切换）
  */
 class MockSearchService implements SearchService {
-  async search(options: SearchOptions): Promise<SearchResult[]> {
+  async search(options: SearchOptions): Promise<NodeInfo[]> {
     // 打桩实现
     console.info(`[FFI MOCK] Searching for: ${options.query}`);
     

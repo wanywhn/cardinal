@@ -20,7 +20,7 @@ use std::{
     },
     time::Duration,
 };
-use std::ffi::c_void;
+
 
 // 全局状态
 static APP_QUIT: AtomicBool = AtomicBool::new(false);
@@ -41,6 +41,16 @@ pub struct NodeInfoMetadata {
     pub size: i64,
     pub ctime: u32,
     pub mtime: u32,
+}
+
+#[napi]
+#[repr(u8)]
+pub enum NodeFileType {
+    // File occurs a lot, assign it to 0 for better compression ratio(I guess... maybe useful).
+    File = 0,
+    Dir = 1,
+    Symlink = 2,
+    Unknown = 3,
 }
 
 impl NodeInfoMetadata {

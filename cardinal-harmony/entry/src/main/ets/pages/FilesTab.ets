@@ -1,4 +1,5 @@
-import { AppStateManager, AppState, SearchResult } from '../types/AppStateManager'
+import { AppStateManager, AppState } from '../types/AppStateManager'
+import { NodeInfo, NodeFileType } from 'libharmony_bindings.so';
 
 /**
  * 文件标签页组件
@@ -20,42 +21,50 @@ export struct FilesTab {
   }
 
   @Builder
-  ResultRow(ri:RepeatItem<SearchResult>) {
-    Row() {
+  ResultRow(ri:RepeatItem<NodeInfo>) {
+    Row({space: 1}) {
       // 图标占位
-      Image($r('app.media.icon_file'))
-        .width(24)
-        .height(24)
-        .margin({ right: 10 })
+      // Image($r('app.media.icon_file'))
+      //   .width(24)
+      //   .height(24)
+      //   .margin({ right: 10 })
+      Text(ri.item.metadata?.type.toString())
+        .margin({right: 10})
 
       // 文件信息列
       // Column({ space: 2 }) {
         // 文件名
-        Text(ri.item.name)
+        Text(ri.item.path.substring(ri.item.path.lastIndexOf("/")+1))
           .fontSize(16)
           .fontColor($r('app.color.text_secondary_color'))
           .fontWeight(FontWeight.Medium)
           .maxLines(1)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
-
+          .layoutWeight(1)
         // 文件路径
         Text(ri.item.path)
           .fontSize(12)
           .fontColor($r('app.color.text_secondary_color'))
           .maxLines(1)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
-          .layoutWeight(1)
+          .layoutWeight(2)
       // }
       // .layoutWeight(1)
 
       // 文件大小和修改时间
       // Column({ space: 2 }) {
-        Text(ri.item.size)
+        Text(formatFileSize(ri.item))
           .fontSize(14)
           .fontColor($r('app.color.text_secondary_color'))
           .alignSelf(ItemAlign.End)
+          .layoutWeight(1)
 
-        Text(ri.item.modified)
+        Text(formatTimestamp(ri.item.metadata?.mtime))
+          .fontSize(12)
+          .fontColor($r('app.color.text_secondary_color'))
+          .alignSelf(ItemAlign.End)
+
+        Text(formatTimestamp(ri.item.metadata?.ctime))
           .fontSize(12)
           .fontColor($r('app.color.text_secondary_color'))
           .alignSelf(ItemAlign.End)
@@ -87,7 +96,7 @@ export struct FilesTab {
       } else {
         // 使用ForEach组件显示搜索结果
         List({ space: 1 }) {
-          Repeat<SearchResult>(this.currentState.searchResults)
+          Repeat<NodeInfo>(this.currentState.searchResults)
             .each((ri) => {
               ListItem() {
                 Column({ space: 2 }) {
@@ -115,4 +124,24 @@ export struct FilesTab {
     // 根据可见范围加载数据
     console.info(`Loading range: ${start} to ${end}`)
   }
+}
+
+// 辅助函数：格式化文件大小
+function formatFileSize(node: NodeInfo): string {
+  const bytes = node.metadata?.size
+  if (node.metadata?.type != NodeFileType.File) {
+    return '-'
+  }
+  if (bytes === undefined) return '-'
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
+}
+
+// 辅助函数：格式化时间戳
+function formatTimestamp(timestamp: number | undefined): string {
+  if (timestamp === undefined) return '-'
+  const date = new Date(timestamp * 1000); // Rust后端使用秒级时间戳
+  return date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
 }

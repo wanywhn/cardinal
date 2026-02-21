@@ -3,21 +3,7 @@ import { hilog } from '@kit.PerformanceAnalysisKit';
 import App from '@system.app';
 import { abilityAccessCtrl, bundleManager, Permissions } from '@kit.AbilityKit';
 import { Environment, fileUri } from '@kit.CoreFileKit';
-import { LifecycleState } from 'libharmony_bindings.so';
-
-/**
- * 应用级状态管理器
- * 使用ArkTS状态管理V2实现
- */
-// 定义搜索结果类型（适配ArkUI渲染）
-@ObservedV2
-export class SearchResult {
-  @Trace id: string = "1";
-  @Trace name: string = "2";
-  @Trace path: string = "3";
-  @Trace size: string = "4";
-  @Trace modified: string = "5";
-}
+import { LifecycleState, NodeInfo } from 'libharmony_bindings.so';
 
 // 定义文件系统事件类型
 export interface FileSystemEvent {
@@ -48,7 +34,7 @@ export class AppState {
   @Trace public isLoading: boolean = false;
   @Trace public backendInitialized: boolean = false;
   @Trace public backendStatus: number = LifecycleState.Uninitialized;
-  @Trace public searchResults: SearchResult[] = [];
+  public searchResults: NodeInfo[] = [];
   @Trace public fileSystemEvents: FileSystemEvent[] = [];
   @Trace public activeTab: number = 0; // 0 for files, 1 for events
 }
@@ -129,8 +115,8 @@ export class AppStateManager {
   }
 
   // 更新搜索结果
-  public setSearchResults(results: SearchResult[]): void {
-    this.state.searchResults = [...results]; // 创建新数组以触发更新
+  public setSearchResults(results: NodeInfo[]): void {
+    this.state.searchResults = results;
     this.state.isLoading = false;
     this.notify();
   }
