@@ -49,9 +49,6 @@ export class AppStateManager {
   // 观察者列表
   private observers: Array<(state: AppState) => void> = [];
 
-  // 后端初始化状态跟踪
-  private backendInitialized: boolean = false;
-
   // 私有构造函数，实现单例模式
   private constructor() {
     // 应用启动时延迟初始化后端
@@ -147,7 +144,7 @@ export class AppStateManager {
    * 初始化后端服务
    */
   public async initializeBackend(): Promise<void> {
-    if (this.backendInitialized) {
+    if (this.state.backendInitialized) {
       console.info("Backend already initialized");
       return;
     }
@@ -208,7 +205,7 @@ export class AppStateManager {
    * 通过FFI调用原生搜索功能
    */
   public async performSearch(query: string): Promise<void> {
-    if (!this.backendInitialized) {
+    if (!this.state.backendInitialized) {
       console.info("Backend not ready for search, ignoring request");
       return;
     }
@@ -254,7 +251,7 @@ export class AppStateManager {
    * 通过FFI调用原生事件监听功能
    */
   public startFileSystemEventListening(): void {
-    if (!this.backendInitialized) {
+    if (!this.state.backendInitialized) {
       console.info("Backend not ready for event listening");
       return;
     }
@@ -280,7 +277,7 @@ export class AppStateManager {
     try {
       this.stopFileSystemEventListening();
       await searchService.cleanupBackend();
-      this.backendInitialized = false;
+      this.state.backendInitialized = false;
       this.setBackendStatus(LifecycleState.Uninitialized);
       console.info("Application cleanup completed");
     } catch (error) {
