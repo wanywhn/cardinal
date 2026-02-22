@@ -23,12 +23,11 @@ export struct FilesTab {
   @Builder
   ResultRow(ri:RepeatItem<NodeInfo>) {
     Row({space: 1}) {
-      // 图标占位
-      // Image($r('app.media.icon_file'))
-      //   .width(24)
-      //   .height(24)
-      //   .margin({ right: 10 })
-      Text(ri.item.metadata?.type.toString())
+
+      SymbolGlyph(getItemIcon(ri.item))
+        .fontSize(24)
+        .renderingStrategy(SymbolRenderingStrategy.SINGLE)
+        .fontColor([Color.Black, Color.Green, Color.White])
         .margin({right: 10})
 
       // 文件信息列
@@ -47,7 +46,7 @@ export struct FilesTab {
           .fontColor($r('app.color.text_secondary_color'))
           .maxLines(1)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
-          .layoutWeight(2)
+          .layoutWeight(4)
       // }
       // .layoutWeight(1)
 
@@ -63,11 +62,14 @@ export struct FilesTab {
           .fontSize(12)
           .fontColor($r('app.color.text_secondary_color'))
           .alignSelf(ItemAlign.End)
+          .layoutWeight(1)
 
         Text(formatTimestamp(ri.item.metadata?.ctime))
           .fontSize(12)
           .fontColor($r('app.color.text_secondary_color'))
           .alignSelf(ItemAlign.End)
+          .layoutWeight(1)
+
       // }
     }
     .padding({ top: 8, bottom: 8, left: 16, right: 16 })
@@ -144,4 +146,17 @@ function formatTimestamp(timestamp: number | undefined): string {
   if (timestamp === undefined) return '-'
   const date = new Date(timestamp * 1000); // Rust后端使用秒级时间戳
   return date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
+}
+
+function getItemIcon(item: NodeInfo): Resource {
+  switch (item.metadata?.type) {
+    case NodeFileType.File:
+      return $r('sys.symbol.doc')
+    case NodeFileType.Dir:
+      return $r('sys.symbol.folder')
+    case NodeFileType.Symlink:
+      return $r('sys.symbol.link_slash')
+    default:
+      return $r('sys.symbol.questionmark_circle')
+  }
 }
