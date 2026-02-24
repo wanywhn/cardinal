@@ -11,6 +11,10 @@ import filePreview from '@hms.filemanagement.filepreview';
 export struct FilesTab {
   private appState: AppStateManager = AppStateManager.getInstance()
   currentState: AppState = this.appState.getState()
+  @Local colNameWidth2: Length = '25%'
+  @Local colPathWidth2: Length = '50%'
+  @Local colSizeWidth2: Length = '10%'
+  @Local colMtimeWidth2: Length = '15%'
 
   aboutToAppear(): void {
     // 订阅状态变化
@@ -26,30 +30,31 @@ export struct FilesTab {
   @Builder
   ResultRow(ri:RepeatItem<NodeInfo>) {
     Row({space: 1}) {
+      Row() {
+        SymbolGlyph(getItemIcon(ri.item))
+          .fontSize(24)
+          .renderingStrategy(SymbolRenderingStrategy.SINGLE)
+          .fontColor([Color.Black, Color.Green, Color.White])
+          .margin({right: 10})
 
-      SymbolGlyph(getItemIcon(ri.item))
-        .fontSize(24)
-        .renderingStrategy(SymbolRenderingStrategy.SINGLE)
-        .fontColor([Color.Black, Color.Green, Color.White])
-        .margin({right: 10})
-
-      // 文件信息列
-      // Column({ space: 2 }) {
-        // 文件名
         Text(ri.item.path.substring(ri.item.path.lastIndexOf("/")+1))
           .fontSize(16)
           .fontColor($r('app.color.text_secondary_color'))
           .fontWeight(FontWeight.Medium)
           .maxLines(1)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
-          .layoutWeight(1)
+      }
+      .width(this.colNameWidth2)
+      // .layoutWeight(1)
+
         // 文件路径
         Text(ri.item.path)
           .fontSize(12)
           .fontColor($r('app.color.text_secondary_color'))
           .maxLines(1)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
-          .layoutWeight(4)
+          // .layoutWeight(4)
+          .width(this.colPathWidth2)
       // }
       // .layoutWeight(1)
 
@@ -59,20 +64,15 @@ export struct FilesTab {
           .fontSize(14)
           .fontColor($r('app.color.text_secondary_color'))
           .alignSelf(ItemAlign.End)
-          .layoutWeight(1)
+          // .layoutWeight(1)
+          .width(this.colSizeWidth2)
 
         Text(formatTimestamp(ri.item.metadata?.mtime))
           .fontSize(12)
           .fontColor($r('app.color.text_secondary_color'))
           .alignSelf(ItemAlign.End)
-          .layoutWeight(1)
-
-        Text(formatTimestamp(ri.item.metadata?.ctime))
-          .fontSize(12)
-          .fontColor($r('app.color.text_secondary_color'))
-          .alignSelf(ItemAlign.End)
-          .layoutWeight(1)
-
+          // .layoutWeight(1)
+          .width(this.colMtimeWidth2)
       // }
     }
     .padding({ top: 8, bottom: 8, left: 16, right: 16 })
@@ -143,22 +143,70 @@ export struct FilesTab {
           .textAlign(TextAlign.Center)
           .width('100%')
       } else {
-        // 使用ForEach组件显示搜索结果
-        List({ space: 1 }) {
-          Repeat<NodeInfo>(this.currentState.searchResults)
-            .each((ri) => {
-              ListItem() {
-                Column({ space: 2 }) {
-                  this.ResultRow(ri)
-                }
-              }.border({ width: 1 })
-            }).virtualScroll()
-        }
-        .cachedCount(10)
-        .edgeEffect(EdgeEffect.Spring)
-        .scrollBar(BarState.Auto)
-        .layoutWeight(1)
-        .width('100%')
+        Column() {
+            Row() {
+                Text('名称')
+                .width(this.colNameWidth2)
+                // .layoutWeight(1)
+                .height(40)
+                .backgroundColor('#f0f0f0')
+                .textAlign(TextAlign.Center)
+                .fontSize(16)
+                .fontWeight(FontWeight.Bold)
+                .border({ width: 1, color: '#ccc' })
+
+              Text('路径')
+                .width(this.colPathWidth2)
+                // .layoutWeight(3)
+                .height(40)
+                .backgroundColor('#f0f0f0')
+                .textAlign(TextAlign.Center)
+                .fontSize(16)
+                .fontWeight(FontWeight.Bold)
+                .border({ width: 1, color: '#ccc' })
+
+              Text('大小')
+                .width(this.colSizeWidth2)
+                // .layoutWeight(1)
+                .height(40)
+                .backgroundColor('#f0f0f0')
+                .textAlign(TextAlign.Center)
+                .fontSize(16)
+                .fontWeight(FontWeight.Bold)
+                .border({ width: 1, color: '#ccc' })
+
+              Text('修改时间')
+                .width(this.colMtimeWidth2)
+                // .layoutWeight(1)
+                .height(40)
+                .backgroundColor('#f0f0f0')
+                .textAlign(TextAlign.Center)
+                .fontSize(16)
+                .fontWeight(FontWeight.Bold)
+                .border({ width: 1, color: '#ccc' })
+
+            }
+            .width('100%')
+            .height(40)
+
+          // 使用ForEach组件显示搜索结果
+          List({ space: 1 }) {
+            Repeat<NodeInfo>(this.currentState.searchResults)
+              .each((ri) => {
+                ListItem() {
+                  Column({ space: 2 }) {
+                    this.ResultRow(ri)
+                  }
+                }.border({ width: 1 })
+              }).virtualScroll()
+          }
+          .cachedCount(10)
+          .edgeEffect(EdgeEffect.Spring)
+          .scrollBar(BarState.Auto)
+          .layoutWeight(1)
+          .width('100%')
+          .height('100%')
+        }.width('100%')
       }
     }
     .layoutWeight(1)
