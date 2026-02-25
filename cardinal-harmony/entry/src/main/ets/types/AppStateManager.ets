@@ -15,7 +15,7 @@ export interface FileSystemEvent {
 }
 
 // 后端初始化配置
-const DEFAULT_WATCH_ROOT: string = "/data/app/el2/100/base/com.wanywhn.anything";
+const DEFAULT_WATCH_ROOT: string = "/data/app/el2/100/base/com.wanywhn.anything/";
 const DEFAULT_IGNORE_PATHS: string[] = [
   "node_modules",
   ".git",
@@ -45,14 +45,36 @@ export class AppState {
 export class AppStateManager {
   private static instance: AppStateManager;
   private state: AppState = new AppState()
+  private dbPath?: string;
+  private isInitialized = false;
 
   // 观察者列表
   private observers: Array<(state: AppState) => void> = [];
 
   // 私有构造函数，实现单例模式
   private constructor() {
-    // 应用启动时延迟初始化后端
-    this.delayedInitializeBackend();
+    // 不在构造函数中自动初始化，由外部显式调用 init()
+  }
+
+  /**
+   * 设置应用文件目录 - 在 Ability 中调用
+   * @param dir 应用文件目录路径
+   */
+  public setFilesDir(dir: string): void {
+    this.dbPath = dir;
+    console.info(`FilesDir set to: ${dir}`);
+  }
+
+  /**
+   * 初始化后端 - 在设置完 dbPath 后调用
+   */
+  public init(): void {
+    if (this.isInitialized) {
+      console.info('AppStateManager already initialized');
+      return;
+    }
+    this.isInitialized = true;
+    this.initializeBackend();
   }
 
   // 获取单例实例
@@ -131,16 +153,6 @@ export class AppStateManager {
   }
 
   /**
-   * 延迟初始化后端 - 在应用启动后异步执行
-   */
-  private async delayedInitializeBackend(): Promise<void> {
-    // 等待UI初始化完成
-    setTimeout(async () => {
-      await this.initializeBackend();
-    }, 1000); // 延迟1秒开始初始化
-  }
-
-  /**
    * 初始化后端服务
    */
   public async initializeBackend(): Promise<void> {
@@ -159,17 +171,15 @@ export class AppStateManager {
       }
 
       await checkPermissions()
-      const docuri = Environment.getUserDocumentDir();
-      console.info(`docuri is ${docuri}`)
-
+      // const docuri = Environment.getUserDocumentDir();
+      // console.info(`docuri is ${docuri}`)
 
       const bind_func = (err: Error | null, arg: LifecycleState): void => this.setBackendStatus(arg);
 
       const status = await searchService.initializeBackend(
-        // DEFAULT_WATCH_ROOT,
-        // docuri,
         "/storage/Users/currentUser",
         DEFAULT_IGNORE_PATHS,
+        this.dbPath + "/cardianl.db",
         bind_func
       );
     } catch (error) {
@@ -277,8 +287,8 @@ export class AppStateManager {
     try {
       this.stopFileSystemEventListening();
       await searchService.cleanupBackend();
-      this.state.backendInitialized = false;
-      this.setBackendStatus(LifecycleState.Uninitialized);
+      // this.state.backendInitialized = false;
+      // this.setBackendStatus(LifecycleState.Uninitialized);
       console.info("Application cleanup completed");
     } catch (error) {
       console.error("Cleanup failed:", error);

@@ -151,6 +151,7 @@ impl BackendState {
 pub async fn initialize_harmony_backend(
     watch_root: String,
     ignore_paths: Vec<String>,
+    db_uri: String,
     func_set_state: ThreadsafeFunction<LifecycleState, ()>
 ) -> Result<LifecycleState> {
     hilog_debug!("Backend: Starting HarmonyOS backend initialization");
@@ -158,7 +159,9 @@ pub async fn initialize_harmony_backend(
     update_lifecycle_state(LifecycleState::Initializing);
 
     // 初始化数据库路径
-    let db_path = PathBuf::from(get_path_from_uri("file://com.wanywhn.anything/data/storage/el2/base/files/cardinal.db").unwrap());
+    hilog_debug!("Backend: db_uri : {:?}", db_uri);
+    let db_path = PathBuf::from(get_path_from_uri(&db_uri).unwrap());
+    hilog_debug!("Backend: db_path : {:?}", db_path);
 
     DB_PATH
         .set(db_path)
