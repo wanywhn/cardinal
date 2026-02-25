@@ -1,17 +1,13 @@
 use base64::{engine::general_purpose, Engine as _};
 use fs_icon;
 use napi_derive_ohos::napi;
+use napi_ohos::threadsafe_function::{ThreadsafeFunction, ThreadsafeFunctionCallMode};
 use napi_ohos::{Error, Result};
-use napi_ohos::{
-    threadsafe_function::{ThreadsafeFunction, ThreadsafeFunctionCallMode},
-    Env,
-};
 use ohos_fileuri_binding::get_path_from_uri;
-use ohos_hilog_binding::hilog_debug;
+use ohos_hilog_binding::{hilog_debug, hilog_info};
 use once_cell::sync::{Lazy, OnceCell};
-use search_cache::{SearchCache, SearchOptions, SearchResultNode, SlabNodeMetadataCompact};
+use search_cache::{SearchCache, SearchOptions, SearchResultNode, SlabNodeMetadataCompact, WalkData};
 use search_cancel::CancellationToken;
-use serde::Serialize;
 use std::{
     path::PathBuf,
     sync::{
@@ -20,7 +16,7 @@ use std::{
     },
     time::Duration,
 };
-
+use std::sync::Once;
 
 // 全局状态
 static APP_QUIT: AtomicBool = AtomicBool::new(false);
@@ -138,7 +134,7 @@ impl BackendState {
             func_mtd.call_with_return_value(
                 Ok(self.lifecycle_state),
                 ThreadsafeFunctionCallMode::NonBlocking,
-                |result, env| {
+                |_result, _env| {
                     Ok(())
                 }
             );
@@ -162,7 +158,7 @@ pub async fn initialize_harmony_backend(
     update_lifecycle_state(LifecycleState::Initializing);
 
     // 初始化数据库路径
-    let db_path = PathBuf::from("com.wanywhn.anything/data/storage/el2/cardinal.db");
+    let db_path = PathBuf::from(get_path_from_uri("file://com.wanywhn.anything/data/storage/el2/base/files/cardinal.db").unwrap());
 
     DB_PATH
         .set(db_path)
@@ -197,6 +193,36 @@ fn update_lifecycle_state(new_state: LifecycleState) {
     println!("Lifecycle state changed to: {}", new_state.to_str());
 }
 
+pub(crate) fn build_search_cache(
+    watch_root: &str,
+    ignore_paths: &[PathBuf],
+) -> Option<SearchCache> {
+    let path = PathBuf::from(watch_root);
+    let walk_data = WalkData::new(
+        &path,
+        ignore_paths,
+        false,
+        Some(&APP_QUIT),
+    );
+    let walking_done = AtomicBool::new(false);
+
+    std::thread::scope(|s| {
+        s.spawn(|| {
+            while !walking_done.load(Ordering::Relaxed) {
+                let dirs = walk_data.num_dirs.load(Ordering::Relaxed);
+                let files = walk_data.num_files.load(Ordering::Relaxed);
+                let _total = dirs + files;
+                //TODO update cache info to UI
+                std::thread::sleep(Duration::from_millis(100));
+            }
+        });
+        let cache =
+            SearchCache::walk_fs_with_walk_data(&walk_data, Some(&APP_QUIT));
+        walking_done.store(true, Ordering::Relaxed);
+        cache
+    })
+}
+
 // 运行逻辑线程
 fn run_logic_thread(watch_root: String, ignore_paths: Vec<String>) -> Result<()> {
     // 检查数据库路径
@@ -217,17 +243,38 @@ fn run_logic_thread(watch_root: String, ignore_paths: Vec<String>) -> Result<()>
 
     hilog_debug!("Backend :Building search cache for path: {:?}", watch_path);
 
-    // 创建搜索缓存
-    let search_cache = SearchCache::walk_fs(&watch_path);
+    let cache = match SearchCache::try_read_persistent_cache(
+        &watch_path,
+        db_path,
+        &ignore_paths,
+        Some(&APP_QUIT),
+    ) {
+        Ok(cached) => {
+            hilog_info!("Loaded existing cache, Total files: {}", cached.get_total_files());
+            //TODO update cache info to UI
+            cached
+        }
+        Err(e) => {
+            hilog_info!("Walking filesystem: {:?}", e);
+            let Some(cache) = build_search_cache(&watch_root, &ignore_paths) else {
+                hilog_info!("Walk filesystem cancelled, app quitting");
+                return Ok(());
+            };
+            //TODO update cache info to UI
+            hilog_info!("build_search_cache ok");
+            cache
+        }
+    };
+
     hilog_debug!(
         "Backend: Search cache built successfully. Total files: {}",
-        search_cache.get_total_files()
+        cache.get_total_files()
     );
 
     // 更新后端状态
     {
         let mut state = BACKEND_STATE.write().unwrap();
-        state.search_cache = Some(Arc::new(RwLock::new(search_cache)));
+        state.search_cache = Some(Arc::new(RwLock::new(cache)));
         state.root_path = Some(watch_path);
         state.set_lifecycle_state(LifecycleState::Ready);
     }
@@ -385,10 +432,32 @@ pub async fn trigger_rescan() -> Result<()> {
 // 清理后端
 #[napi]
 pub async fn cleanup_backend() -> Result<()> {
-    println!("Cleaning up HarmonyOS backend");
+    hilog_debug!("Backend: Cleaning up HarmonyOS backend");
     APP_QUIT.store(true, Ordering::Relaxed);
 
+    static FLUSH_ONCE: Once = Once::new();
+    FLUSH_ONCE.call_once(|| {
+        let mut state = BACKEND_STATE.write().unwrap();
+        let cache_arc = state.search_cache.take().unwrap();
+        // 尝试获取唯一所有权
+        match Arc::try_unwrap(cache_arc) {
+            Ok(cache_lock) => {
+                hilog_debug!("Backend: Flush to file 1");
+                let cache = cache_lock.into_inner().unwrap();
+                hilog_debug!("Backend: Flush to file 2");
+                cache.flush_to_file(DB_PATH.get().unwrap()).unwrap();
+                hilog_debug!("Backend: Flush to file 3");
+            }
+            Err(arc_cache) => {
+                // 如果还有其他引用，尝试获取写锁并克隆
+                hilog_debug!("Backend: Cache still has multiple references, skipping flush");
+                // 重新放回去
+                state.search_cache = Some(arc_cache);
+            }
+        }
+    });
+
     update_lifecycle_state(LifecycleState::Uninitialized);
-    println!("Backend cleanup completed");
+    hilog_debug!("Backend cleanup completed");
     Ok(())
 }
