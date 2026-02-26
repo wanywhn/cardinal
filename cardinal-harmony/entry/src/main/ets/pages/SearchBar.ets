@@ -34,9 +34,6 @@ export struct SearchBar {
           this.searchQuery = value
           this.queryChangeCallback(value)
         })
-        .onSubmit((enterKey: EnterKeyType) => {
-          this.queryChangeCallback(this.searchQuery)
-        })
         // 大小写敏感选项
         Toggle({
           type: ToggleType.Switch,

@@ -82,7 +82,8 @@ class RustSearchService implements SearchService {
       
       const slabIndices : Array<number> = await nativeBackend.search(options.query, caseInsensitive, maxResults);
       console.info(`[Rust Backend] Search returned ${slabIndices.length} results`);
-      
+
+      // TODO 将来可以仅先获取slabIndices，后续若列表显示具体数据的时候，再调用getNodesInfo获取具体信息，以提升性能。
       // 获取节点详细信息
       if (slabIndices.length > 0) {
         const nodeInfos = await this.getNodesInfo(slabIndices, true);

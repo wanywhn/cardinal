@@ -34,7 +34,7 @@ export class AppState {
   @Trace public isLoading: boolean = false;
   @Trace public backendInitialized: boolean = false;
   @Trace public backendStatus: number = LifecycleState.Uninitialized;
-  public searchResults: NodeInfo[] = [];
+  @Trace searchResults: NodeInfo[] = [];
   @Trace public fileSystemEvents: FileSystemEvent[] = [];
   @Trace public activeTab: number = 0; // 0 for files, 1 for events
 }

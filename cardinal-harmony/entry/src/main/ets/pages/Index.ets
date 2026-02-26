@@ -62,8 +62,6 @@ struct Index {
 
   build() {
     Column() {
-      // 后端状态栏
-      this.StatusBar()
 
       // 搜索栏
       SearchBar({
@@ -77,11 +75,6 @@ struct Index {
           }
         }
       }).height(50)
-
-      // 搜索结果统计
-      if (this.currentState.searchQuery || this.currentState.isLoading) {
-        this.ResultsInfo()
-      }
 
       // 标签页切换
       Tabs({ barPosition: BarPosition.Start }) {
@@ -97,15 +90,30 @@ struct Index {
       .barPosition(BarPosition.End)
       .vertical(false)
       .barMode(BarMode.Fixed)
+      .scrollable(false)
+      .cachedMaxCount(0, TabsCacheMode.CACHE_LATEST_SWITCHED)
       .onChange((index: number) => {
         this.appState.setActiveTab(index)
       })
+      Row() {
+        this.objInfoBar()
+        // Blank()
+        // 后端状态栏
+        this.StatusBar()
+      }
+      .justifyContent(FlexAlign.SpaceBetween)
+      .width('100%')
 
-      // 控制按钮
-      this.ControlButtons()
     }
     .height('80%')
     .backgroundColor($r('app.color.main_background_color'))
+  }
+
+  @Builder
+  objInfoBar() {
+    Row() {
+      Text(`${this.currentState.searchResults.length}个对象`)
+    }
   }
 
   /**
@@ -117,8 +125,6 @@ struct Index {
       Text(`后端状态: ${this.appState.getBackendStatusText()}`)
         .fontSize(12)
 
-      Blank()
-      
       // 重新扫描按钮
       if (this.currentState.backendInitialized) {
         Button("重新扫描").onClick(()=> {
@@ -130,62 +136,9 @@ struct Index {
         .fontColor(Color.White)
       }
     }
-    .width('100%')
     .padding({ left: 16, right: 16, top: 8, bottom: 8 })
   }
 
-  /**
-   * 搜索结果信息构建器
-   */
-  @Builder
-  ResultsInfo() {
-    Row() {
-      if (this.currentState.isLoading) {
-        LoadingProgress()
-          .width(16)
-          .height(16)
-        
-        Text("搜索中...")
-          .fontSize(12)
-          .margin({ left: 8 })
-      } else {
-        Text(`找到 ${this.currentState.searchResults.length} 个结果`)
-          .fontSize(12)
-          .fontColor($r('app.color.text_secondary_color'))
-      }
-      
-      Blank()
-      
-      if (this.currentState.searchQuery) {
-        Text(`搜索词: "${this.currentState.searchQuery}"`)
-          .fontSize(10)
-      }
-    }
-    .width('100%')
-    .padding({ left: 16, right: 16, top: 4, bottom: 4 })
-  }
-
-  /**
-   * 控制按钮构建器
-   */
-  @Builder
-  ControlButtons() {
-    Row({ space: 10 }) {
-      Button("开始监听事件").onClick(()=>{
-        this.appState.startFileSystemEventListening()
-      })
-      .enabled(this.currentState.backendInitialized)
-      
-      Button("停止监听事件").onClick(()=>{
-        this.appState.stopFileSystemEventListening()
-      })
-      .enabled(this.currentState.backendInitialized)
-    }
-    .width('100%')
-    .padding(16)
-    .justifyContent(FlexAlign.Center)
-  }
-  
   /**
    * 处理搜索请求
    */
