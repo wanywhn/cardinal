@@ -5,8 +5,6 @@ import { EventsTab } from './EventsTab'
 
 import { abilityAccessCtrl, common, Permissions, bundleManager } from '@kit.AbilityKit';
 import { BusinessError } from '@kit.BasicServicesKit';
-import { appRecovery } from '@kit.AbilityKit';
-
 
 const permissions: Permissions = 'ohos.permission.ACCESS_USER_FULL_DISK';
 
@@ -84,7 +82,8 @@ struct Index {
 
 
       // 初始检查
-      await checkAndHandlePermission();
+      // await checkAndHandlePermission();
+      this.appState.init();
 
     } catch (error) {
       console.error(`Failed to check permissions: ${error}`);

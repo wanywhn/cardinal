@@ -138,7 +138,8 @@ export class AppStateManager {
       const bind_func = (err: Error | null, arg: LifecycleState): void => this.setBackendStatus(arg);
 
       const status = await searchService.initializeBackend(
-        "/storage/Users/currentUser",
+        // "/storage/Users/currentUser",
+        this.dbPath + "",
         DEFAULT_IGNORE_PATHS,
         this.dbPath + "/cardianl.db",
         bind_func

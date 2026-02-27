@@ -2,7 +2,8 @@ import { AppStateManager, AppState } from '../types/AppStateManager'
 import { NodeInfo, NodeFileType } from 'libharmony_bindings.so';
 import fileUri from '@ohos.file.fileuri';
 import uniformTypeDescriptor from '@ohos.data.uniformTypeDescriptor';
-import filePreview from '@hms.filemanagement.filepreview';
+import { filePreview } from '@kit.PreviewKit';
+
 
 /**
  * 文件标签页组件
@@ -19,6 +20,22 @@ export struct FilesTab {
   aboutToAppear(): void {
     // 初始化状态
     this.currentState = this.appState.getState()
+  }
+
+  @Builder
+  RightClickMenuBuilder(ri: RepeatItem<NodeInfo>) {
+    Menu() {
+      MenuItem({ content: '打开文件', labelInfo: '' })
+        .onClick(() => {
+          this.openFile(ri.item.path);
+        })
+      MenuItem({ content: '打开所在文件夹', labelInfo: '' })
+        .onClick(() => {
+          this.openFileFolder(ri.item.path);
+        })
+    }
+    .width(180)
+    .height(80)
   }
 
   @Builder
@@ -78,46 +95,19 @@ export struct FilesTab {
       // TODO: 实现文件打开功能
       // this.openFile(this.item.path)
     })
+    .bindContextMenu(this.RightClickMenuBuilder(ri), ResponseType.RightClick)
     .bindMenu(
       [
       {
         value: '打开',
         action: () => {
-          let uri = fileUri.getUriFromPath(ri.item.path)
-          let uiContext = this.getUIContext().getHostContext() as Context;
-          filePreview.canPreview(uiContext, uri).then((result) => {    // 传入支持的文件类型且文件存在时会返回true
-            console.info(`Succeeded in obtaining the result of whether it can be previewed. result = ${result}`);
-          }).catch((err: BusinessError) => {
-            console.error(`Failed to preview file ${ri.item.path}`)
-            console.error(`Failed to obtain the result of whether it can be previewed, err.code = ${err.code}, err.message = ${err.message}`);
-          });
-          let displayInfo: filePreview.DisplayInfo = {
-            x: 100,
-            y: 100,
-            width: 800,
-            height: 800
-          };
-
-          let typeId = uniformTypeDescriptor.getUniformDataTypeByFilenameExtension(ri.item.path.substring(ri.item.path.lastIndexOf('.')));
-          // 根据UTD数据类型查询对应的MIMEType列表。
-          let typeObj = uniformTypeDescriptor.getTypeDescriptor(typeId);
-          let mimeTypes = typeObj.mimeTypes;
-
-          let fileInfo: filePreview.PreviewInfo = {
-            title: ri.item.path.substring(ri.item.path.lastIndexOf('/')+1),
-            uri: uri,
-            mimeType: mimeTypes[0]
-          };
-          filePreview.openPreview(uiContext, fileInfo, displayInfo).then(() => {
-            console.info('Succeeded in opening preview');
-          }).catch((err: BusinessError) => {
-            console.error(`Failed to open preview, err.code = ${err.code}, err.message = ${err.message}`);
-          });
+          this.openFile(ri.item.path);
         }
       },
       {
         value: '打开文件所在文件夹',
         action: () => {
+          this.openFileFolder(ri.item.path);
         }
       },
     ]
@@ -204,6 +194,55 @@ export struct FilesTab {
     .padding({ top: 10 })
   }
   
+  /**
+   * 打开文件
+   */
+  private openFile(filePath: string): void {
+    let uri = fileUri.getUriFromPath(filePath);
+    let uiContext = this.getUIContext().getHostContext() as Context;
+    
+    filePreview.canPreview(uiContext, uri).then((result) => {
+      console.info(`Succeeded in obtaining the result of whether it can be previewed. result = ${result}`);
+    }).catch((err: BusinessError) => {
+      console.error(`Failed to preview file ${filePath}`);
+      console.error(`Failed to obtain the result of whether it can be previewed, err.code = ${err.code}, err.message = ${err.message}`);
+    });
+    
+    let displayInfo: filePreview.DisplayInfo = {
+      x: 100,
+      y: 100,
+      width: 800,
+      height: 800
+    };
+
+    let typeId = uniformTypeDescriptor.getUniformDataTypeByFilenameExtension(filePath.substring(filePath.lastIndexOf('.')));
+    // 根据UTD数据类型查询对应的MIMEType列表。
+    let typeObj = uniformTypeDescriptor.getTypeDescriptor(typeId);
+    let mimeTypes = typeObj.mimeTypes;
+
+    let fileInfo: filePreview.PreviewInfo = {
+      title: filePath.substring(filePath.lastIndexOf('/')+1),
+      uri: uri,
+      mimeType: mimeTypes[0]
+    };
+    
+    filePreview.openPreview(uiContext, fileInfo, displayInfo).then(() => {
+      console.info('Succeeded in opening preview');
+    }).catch((err: BusinessError) => {
+      console.error(`Failed to open preview, err.code = ${err.code}, err.message = ${err.message}`);
+    });
+  }
+
+  /**
+   * 打开文件所在文件夹
+   */
+  private openFileFolder(filePath: string): void {
+    // TODO: 实现打开文件所在文件夹功能
+    console.info(`Opening folder containing: ${filePath}`);
+    // 这里需要实现打开文件夹的逻辑
+    // 可能需要使用文件管理器或系统API来打开文件夹
+  }
+
   /**
    * 加载指定范围的数据
    */
