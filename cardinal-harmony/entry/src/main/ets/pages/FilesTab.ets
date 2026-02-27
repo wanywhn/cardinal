@@ -17,14 +17,8 @@ export struct FilesTab {
   @Local colMtimeWidth2: Length = '15%'
 
   aboutToAppear(): void {
-    // 订阅状态变化
-    this.appState.subscribe(this.updateUI.bind(this))
     // 初始化状态
     this.currentState = this.appState.getState()
-  }
-  updateUI(state: AppState): void {
-    // 当状态变化时更新UI
-    this.currentState = state
   }
 
   @Builder
@@ -132,11 +126,7 @@ export struct FilesTab {
 
   build() {
     Column() {
-      if (this.currentState.isLoading) {
-        LoadingProgress()
-          .width('100%')
-          .height(50)
-      } else if (this.currentState.searchResults.length === 0) {
+      if (this.currentState.searchResults.length === 0) {
         Text("No results found")
           .fontSize(16)
           .margin({ top: 20 })

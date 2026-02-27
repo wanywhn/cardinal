@@ -10,26 +10,15 @@ export struct EventsTab {
   private currentState: AppState = this.appState.getState()
 
   aboutToAppear(): void {
-    // 订阅状态变化
-    this.appState.subscribe(this.updateUI.bind(this))
     // 开始监听文件系统事件
     this.appState.startFileSystemEventListening()
     // 初始化状态
     this.currentState = this.appState.getState()
   }
-  updateUI(state: AppState): void {
-    // 当状态变化时更新UI
-    this.currentState = state
-    console.info("EventsTab state updated")
-  }
 
   build() {
     Column() {
-      if (this.currentState.isLoading) {
-        LoadingProgress()
-          .width('100%')
-          .height(50)
-      } else if (this.currentState.fileSystemEvents.length === 0) {
+      if (this.currentState.fileSystemEvents.length === 0) {
         Text("No events recorded")
           .fontSize(16)
           .margin({ top: 20 })

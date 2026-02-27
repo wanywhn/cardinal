@@ -10,34 +10,6 @@ import { appRecovery } from '@kit.AbilityKit';
 
 const permissions: Permissions = 'ohos.permission.ACCESS_USER_FULL_DISK';
 
-function reqPermissionsFromUser(permissions: Array<Permissions>, context: common.UIAbilityContext): boolean {
-  let atManager: abilityAccessCtrl.AtManager = abilityAccessCtrl.createAtManager();
-  // requestPermissionsFromUser会判断权限的授权状态来决定是否唤起弹窗
-  atManager.requestPermissionsFromUser(context, permissions).then((data) => {
-    let grantStatus: number[] = data.authResults;
-    let length: number = grantStatus.length;
-    for (let i = 0; i < length; i++) {
-      if (grantStatus[i] === 0) {
-        // 用户授权，可以继续访问目标操作
-        console.info(`${permissions[i]} is granted by user.`);
-      } else {
-        // 用户拒绝授权，提示用户必须授权才能访问当前页面的功能，并引导用户到系统设置中打开相应的权限
-        atManager.requestPermissionOnSetting(context, permissions).then((data: Array<abilityAccessCtrl.GrantStatus>) => {
-          console.info(`requestPermissionOnSetting success, result: ${data}`);
-        }).catch((err: BusinessError) => {
-          console.error(`requestPermissionOnSetting fail, code: ${err.code}, message: ${err.message}`);
-          return false
-        });
-      }
-    }
-    // 授权成功
-  }).catch((err: BusinessError) => {
-    console.error(`Failed to request permissions from user, code: ${err.code}, message: ${err.message}`);
-    return false;
-  })
-  return true
-}
-
 /**
  * 主页面组件
  */
@@ -48,8 +20,6 @@ struct Index {
   @Local currentState: AppState = this.appState.getState()
 
   aboutToAppear(): void {
-    // 订阅状态变化
-    this.appState.subscribe(this.updateUI.bind(this))
     // 初始化状态
     this.currentState = this.appState.getState()
 
@@ -60,12 +30,6 @@ struct Index {
   aboutToDisappear(): void {
     // 清理资源
     this.appState.cleanup()
-  }
-
-  updateUI(state: AppState): void {
-    // 当状态变化时更新UI
-    this.currentState = state
-    console.info("State updated, refreshing UI")
   }
 
   /**
@@ -170,9 +134,6 @@ struct Index {
       .barMode(BarMode.Fixed)
       .scrollable(false)
       .cachedMaxCount(0, TabsCacheMode.CACHE_LATEST_SWITCHED)
-      .onChange((index: number) => {
-        this.appState.setActiveTab(index)
-      })
       
       Row() {
         this.objInfoBar()

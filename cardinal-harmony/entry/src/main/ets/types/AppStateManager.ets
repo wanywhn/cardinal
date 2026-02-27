@@ -31,12 +31,10 @@ const DEFAULT_IGNORE_PATHS: string[] = [
 export class AppState {
   @Trace public searchQuery: string = "";
   @Trace public caseSensitive: boolean = false;
-  @Trace public isLoading: boolean = false;
   @Trace public backendInitialized: boolean = false;
   @Trace public backendStatus: number = LifecycleState.Uninitialized;
   @Trace searchResults: NodeInfo[] = [];
   @Trace public fileSystemEvents: FileSystemEvent[] = [];
-  @Trace public activeTab: number = 0; // 0 for files, 1 for events
 }
 
 /**
@@ -47,9 +45,6 @@ export class AppStateManager {
   private state: AppState = new AppState()
   private dbPath?: string;
   private isInitialized = false;
-
-  // 观察者列表
-  private observers: Array<(state: AppState) => void> = [];
 
   // 私有构造函数，实现单例模式
   private constructor() {
@@ -85,24 +80,6 @@ export class AppStateManager {
     return AppStateManager.instance;
   }
 
-  // 订阅状态变化
-  public subscribe(observer: (state: AppState) => void): void {
-    this.observers.push(observer);
-  }
-
-  // 取消订阅
-  public unsubscribe(observer: (state: AppState) => void): void {
-    const index = this.observers.indexOf(observer);
-    if (index > -1) {
-      this.observers.splice(index, 1);
-    }
-  }
-
-  // 通知所有观察者状态变化
-  private notify(): void {
-    this.observers.forEach(observer => observer(this.state));
-  }
-
   // 获取当前状态
   public getState(): AppState {
     return this.state;
@@ -111,45 +88,27 @@ export class AppStateManager {
   // 更新搜索查询
   public setSearchQuery(query: string): void {
     this.state.searchQuery = query;
-    this.notify();
   }
 
   // 切换大小写敏感
   public toggleCaseSensitive(): void {
     this.state.caseSensitive = !this.state.caseSensitive;
-    this.notify();
-  }
-
-  // 设置加载状态
-  public setLoading(loading: boolean): void {
-    this.state.isLoading = loading;
-    this.notify();
   }
 
   // 更新后端状态
   public setBackendStatus(status: LifecycleState): void {
     this.state.backendStatus = status;
     this.state.backendInitialized = (status === LifecycleState.Ready);
-    this.notify();
   }
 
   // 更新搜索结果
   public setSearchResults(results: NodeInfo[]): void {
     this.state.searchResults = results;
-    this.state.isLoading = false;
-    this.notify();
   }
 
   // 更新文件系统事件
   public setFileSystemEvents(events: FileSystemEvent[]): void {
     this.state.fileSystemEvents = [...events]; // 创建新数组以触发更新
-    this.notify();
-  }
-
-  // 切换活动标签页
-  public setActiveTab(tabIndex: number): void {
-    this.state.activeTab = tabIndex;
-    this.notify();
   }
 
   /**
@@ -217,8 +176,6 @@ export class AppStateManager {
       console.info("Backend not ready for search, ignoring request");
       return;
     }
-
-    this.setLoading(true);
 
     try {
       const searchOptions: SearchOptions = {
