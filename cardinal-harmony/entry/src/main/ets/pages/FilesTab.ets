@@ -42,7 +42,7 @@ export struct FilesTab {
   ResultRow(ri:RepeatItem<NodeInfo>) {
     Row({space: 1}) {
       Row() {
-        SymbolGlyph(getItemIcon(ri.item))
+        SymbolGlyph(getUTDIcon(ri.item))
           .fontSize(24)
           .renderingStrategy(SymbolRenderingStrategy.SINGLE)
           .fontColor([Color.Black, Color.Green, Color.White])
@@ -264,6 +264,140 @@ function formatTimestamp(timestamp: number | undefined): string {
   if (timestamp === undefined) return '-'
   const date = new Date(timestamp * 1000); // Rust后端使用秒级时间戳
   return date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
+}
+
+// 辅助函数：根据文件扩展名获取图标资源
+function getIconByExtension(extension: string): Resource {
+  // 使用简单的switch语句来避免ArkTS的类型限制
+  switch (extension) {
+    // 文档文件
+    case '.pdf':
+    case '.doc':
+    case '.docx':
+    case '.txt':
+    case '.rtf':
+      return $r('sys.symbol.doc')
+    
+    // 表格文件
+    case '.xls':
+    case '.xlsx':
+    case '.csv':
+      return $r('sys.symbol.doc') // 使用文档图标作为表格文件图标
+    
+    // 演示文稿
+    case '.ppt':
+    case '.pptx':
+      return $r('sys.symbol.doc') // 使用文档图标作为演示文稿图标
+    
+    // 图片文件
+    case '.jpg':
+    case '.jpeg':
+    case '.png':
+    case '.gif':
+    case '.bmp':
+    case '.svg':
+      return $r('sys.symbol.rectangle_stack') // 使用堆叠矩形作为图片图标
+    
+    // 音频文件
+    case '.mp3':
+    case '.wav':
+    case '.flac':
+    case '.aac':
+      return $r('sys.symbol.waveform') // 使用波形图标作为音频图标
+    
+    // 视频文件
+    case '.mp4':
+    case '.avi':
+    case '.mkv':
+    case '.mov':
+      return $r('sys.symbol.play') // 使用播放图标作为视频图标
+    
+    // 压缩文件
+    case '.zip':
+    case '.rar':
+    case '.7z':
+    case '.tar':
+    case '.gz':
+      return $r('sys.symbol.archivebox')
+    
+    // 代码文件
+    case '.js':
+    case '.ts':
+    case '.py':
+    case '.java':
+    case '.cpp':
+    case '.c':
+    case '.html':
+    case '.css':
+    case '.json':
+    case '.xml':
+      return $r('sys.symbol.doc')
+    
+    // 可执行文件
+    case '.exe':
+    case '.app':
+    case '.bin':
+      return $r('sys.symbol.gearshape')
+    
+    default:
+      return $r('sys.symbol.doc')
+  }
+}
+
+// 辅助函数：根据文件路径获取UTD图标
+function getUTDIcon(item: NodeInfo): Resource {
+  // 如果是文件夹，使用文件夹图标
+  if (item.metadata?.type === NodeFileType.Dir) {
+    return $r('sys.symbol.folder')
+  }
+  
+  // 如果是符号链接，使用链接图标
+  if (item.metadata?.type === NodeFileType.Symlink) {
+    return $r('sys.symbol.link_slash')
+  }
+  
+  // 对于文件，根据文件扩展名获取UTD类型并映射到图标
+  let filePath = item.path
+  let extension = filePath.substring(filePath.lastIndexOf('.')).toLowerCase()
+  
+  if (extension === '') {
+    return $r('sys.symbol.questionmark_circle')
+  }
+  
+  try {
+    // 获取文件扩展名对应的UTD类型ID
+    let typeId = uniformTypeDescriptor.getUniformDataTypeByFilenameExtension(extension)
+    
+    // 获取类型描述符
+    let typeObj = uniformTypeDescriptor.getTypeDescriptor(typeId)
+
+    // 根据UTD类型信息选择合适的图标
+    // 这里可以根据typeObj的mimeTypes或description来进一步细化图标选择
+    if (typeObj.mimeTypes && typeObj.mimeTypes.length > 0) {
+      let mimeType = typeObj.mimeTypes[0]
+      
+      // 根据MIME类型大类选择图标
+      if (mimeType.startsWith('image/')) {
+        return $r('sys.symbol.rectangle_stack') // 图片文件使用堆叠矩形图标
+      } else if (mimeType.startsWith('audio/')) {
+        return $r('sys.symbol.waveform') // 音频文件使用波形图标
+      } else if (mimeType.startsWith('video/')) {
+        return $r('sys.symbol.play') // 视频文件使用播放图标
+      } else if (mimeType.startsWith('text/')) {
+        return $r('sys.symbol.doc') // 文本文件使用文档图标
+      } else if (mimeType.includes('pdf')) {
+        return $r('sys.symbol.doc') // PDF文件使用文档图标
+      }
+    }
+    
+    // 使用扩展名映射作为备用方案
+    return getIconByExtension(extension)
+    
+  } catch (error) {
+    console.error(`Failed to get UTD icon for file ${filePath}: ${error}`)
+    // 使用扩展名映射作为回退方案
+    return getIconByExtension(extension)
+  }
 }
 
 function getItemIcon(item: NodeInfo): Resource {
