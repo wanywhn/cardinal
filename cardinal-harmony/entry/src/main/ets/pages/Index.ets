@@ -80,7 +80,7 @@ struct Index {
         });
       }
 
-
+      // FIXME uncomment bellow to enable permission check
       // 初始检查
       // await checkAndHandlePermission();
       this.appState.init();
