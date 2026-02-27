@@ -27,7 +27,7 @@ export struct FilesTab {
     Menu() {
       MenuItem({ content: '打开文件', labelInfo: '' })
         .onClick(() => {
-          this.openFile(ri.item.path);
+          this.openFile(ri.item.path, ri.item);
         })
       MenuItem({ content: '打开所在文件夹', labelInfo: '' })
         .onClick(() => {
@@ -101,7 +101,7 @@ export struct FilesTab {
       {
         value: '打开',
         action: () => {
-          this.openFile(ri.item.path);
+          this.openFile(ri.item.path, ri.item);
         }
       },
       {
@@ -197,7 +197,7 @@ export struct FilesTab {
   /**
    * 打开文件
    */
-  private openFile(filePath: string): void {
+  private openFile(filePath: string, nodeInfo?: NodeInfo): void {
     let uri = fileUri.getUriFromPath(filePath);
     let uiContext = this.getUIContext().getHostContext() as Context;
     
@@ -215,15 +215,9 @@ export struct FilesTab {
       height: 800
     };
 
-    let typeId = uniformTypeDescriptor.getUniformDataTypeByFilenameExtension(filePath.substring(filePath.lastIndexOf('.')));
-    // 根据UTD数据类型查询对应的MIMEType列表。
-    let typeObj = uniformTypeDescriptor.getTypeDescriptor(typeId);
-    let mimeTypes = typeObj.mimeTypes;
-
     let fileInfo: filePreview.PreviewInfo = {
-      title: filePath.substring(filePath.lastIndexOf('/')+1),
       uri: uri,
-      mimeType: mimeTypes[0]
+      mimeType: ""
     };
     
     filePreview.openPreview(uiContext, fileInfo, displayInfo).then(() => {
