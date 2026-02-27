@@ -14,7 +14,7 @@
     },
     {
       "name": "approximately_full_disk_permission_reason",
-      "value": "读取文件"
+      "value": "用于建立用户文件索引"
     }
   ]
 }

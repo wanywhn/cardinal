@@ -13,7 +13,6 @@ export default class EntryAbility extends UIAbility {
       const appContext = this.context.getApplicationContext();
       const appStateManager = AppStateManager.getInstance();
       appStateManager.setFilesDir(appContext.filesDir);
-      appStateManager.init();
     } catch (err) {
       hilog.error(DOMAIN, 'testTag', 'Failed to set colorMode. Cause: %{public}s', JSON.stringify(err));
     }

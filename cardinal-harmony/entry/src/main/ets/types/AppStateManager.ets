@@ -169,8 +169,6 @@ export class AppStateManager {
         console.error('this api is not supported on this device');
         // return;
       }
-
-      await checkPermissions()
       // const docuri = Environment.getUserDocumentDir();
       // console.info(`docuri is ${docuri}`)
 
@@ -321,15 +319,4 @@ async function checkPermissionGrant(permission: Permissions): Promise<abilityAcc
   }
 
   return grantStatus;
-}
-
-async function checkPermissions(): Promise<void> {
-  let grantStatus: boolean = await checkPermissionGrant('ohos.permission.READ_WRITE_DOCUMENTS_DIRECTORY') === abilityAccessCtrl.GrantStatus.PERMISSION_GRANTED;// 获取拦截键盘输入事件权限状态。
-  if (grantStatus) {
-    // 已经授权，可以继续访问目标操作
-    console.info(`permission is granted.`);
-  } else {
-    // TODO 未授权，引导用户跳转到系统应用“设置”中进行授权
-    console.info(`permission is not granted.`);
-  }
 }

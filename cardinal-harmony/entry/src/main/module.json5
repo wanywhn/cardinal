@@ -13,18 +13,8 @@
     "installationFree": false,
     "pages": "$profile:main_pages",
     "requestPermissions": [
-//      {
-//        "name": "ohos.permission.ACCESS_USER_FULL_DISK",
-//        "reason": "$string:approximately_full_disk_permission_reason",
-//        "usedScene": {
-//          "abilities": [
-//            "EntryAbility"
-//          ],
-//          "when": "always"
-//        }
-//      },
       {
-        "name": "ohos.permission.READ_WRITE_DOCUMENTS_DIRECTORY",
+        "name": "ohos.permission.ACCESS_USER_FULL_DISK",
         "reason": "$string:approximately_full_disk_permission_reason",
         "usedScene": {
           "abilities": [
@@ -33,16 +23,6 @@
           "when": "always"
         }
       },
-      {
-        "name": "ohos.permission.READ_WRITE_DOWNLOAD_DIRECTORY",
-        "reason": "$string:approximately_full_disk_permission_reason",
-        "usedScene": {
-          "abilities": [
-            "EntryAbility"
-          ],
-          "when": "always"
-        }
-      }
     ],
     "abilities": [
       {
