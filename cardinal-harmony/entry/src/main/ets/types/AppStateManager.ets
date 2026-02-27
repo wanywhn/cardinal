@@ -99,6 +99,10 @@ export class AppStateManager {
   public setBackendStatus(status: LifecycleState): void {
     this.state.backendStatus = status;
     this.state.backendInitialized = (status === LifecycleState.Ready);
+    if (status == LifecycleState.Ready) {
+      this.performSearch("")
+
+    }
   }
 
   // 更新搜索结果
