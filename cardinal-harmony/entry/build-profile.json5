@@ -6,15 +6,15 @@
         "enable": false
       }
     },
-//    "externalNativeOptions": {
-//      "path": "./src/main/cpp/CMakeLists.txt",
-//      "arguments": "",
+    "externalNativeOptions": {
+      "path": "./src/main/cpp/CMakeLists.txt",
+      "arguments": "-DQT_PREFIX=C:\\Qt\\5.15\\Qt5.15.12_OHOS18_x86-64_windows_202601191657",
 //      "cppFlags": "",
-//      "abiFilters": [
-//        "arm64-v8a",
-//        "x86_64"
-//      ]
-//    }
+      "abiFilters": [
+        "arm64-v8a",
+        "x86_64"
+      ]
+    }
   },
   "buildOptionSet": [
     {
