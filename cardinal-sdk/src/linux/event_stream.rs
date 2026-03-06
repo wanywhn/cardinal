@@ -40,7 +40,7 @@ impl EventStream {
 
     pub fn spawn(self) -> Option<EventStreamHandle> {
         let (tx, rx) = unbounded();
-        let mut inotify = self.inotify;
+        let inotify = self.inotify;
         let paths = self.paths;
         let latency = self.latency;
         let mut callback = self.callback;
