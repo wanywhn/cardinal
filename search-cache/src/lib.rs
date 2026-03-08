@@ -23,5 +23,8 @@ pub use slab::*;
 pub use slab_node::*;
 pub use type_and_size::*;
 
+// 导出高亮提取相关函数
+pub use highlight::{derive_highlight_terms, extract_highlights_from_query};
+
 #[cfg(test)]
 mod tests;

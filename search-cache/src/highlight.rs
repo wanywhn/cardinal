@@ -1,7 +1,34 @@
-use crate::query_preprocessor::strip_query_quotes_text;
+use crate::query_preprocessor::{strip_query_quotes, expand_query_home_dirs, strip_query_quotes_text};
 use cardinal_syntax::{ArgumentKind, Expr, FilterArgument, Term};
 use query_segmentation::{Segment, query_segmentation};
 use std::collections::BTreeSet;
+
+/// 从搜索查询字符串中提取高亮词
+/// 
+/// 该函数解析搜索查询语法（如 *.pdf、size:>1MB、"exact phrase" 等），
+/// 提取所有需要高亮显示的关键词，返回小写形式的词列表。
+/// 
+/// # 参数
+/// * `query` - 搜索查询字符串
+/// 
+/// # 返回
+/// 高亮词列表（小写，已去重）
+pub fn extract_highlights_from_query(query: &str) -> Vec<String> {
+    // 解析查询
+    let parsed = match cardinal_syntax::parse_query(query) {
+        Ok(expr) => expr,
+        Err(_) => return Vec::new(),
+    };
+    
+    // 扩展家目录
+    let expanded = expand_query_home_dirs(parsed);
+    
+    // 去除引号
+    let unquoted = strip_query_quotes(expanded);
+    
+    // 提取高亮词
+    derive_highlight_terms(&unquoted.expr)
+}
 
 pub fn derive_highlight_terms(expr: &Expr) -> Vec<String> {
     let mut collector = HighlightCollector::default();

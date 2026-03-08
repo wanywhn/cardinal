@@ -105,7 +105,7 @@ fn strip_term_quotes(term: Term) -> Term {
     }
 }
 
-pub(crate) fn strip_query_quotes_text(value: &str) -> String {
+pub fn strip_query_quotes_text(value: &str) -> String {
     if !value.contains('"') && !value.contains('\\') {
         return value.to_string();
     }
