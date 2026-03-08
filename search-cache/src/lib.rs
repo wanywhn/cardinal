@@ -11,20 +11,22 @@ mod segment;
 mod slab;
 mod slab_node;
 mod type_and_size;
+mod search_iterator;
+mod prefetch_thread;
 
 pub use cache::*;
 pub use file_nodes::*;
 pub use fswalk::WalkData;
+pub use highlight::{derive_highlight_terms, extract_highlights_from_query};
 pub use metadata_cache::*;
 pub use name_index::*;
 pub use persistent::*;
+pub use search_iterator::{SearchIterator, SearchBatch, IteratorState};
+pub use prefetch_thread::{PrefetchState, PrefetchMessage, start_prefetch_thread_rwlock};
 pub use segment::*;
 pub use slab::*;
 pub use slab_node::*;
 pub use type_and_size::*;
-
-// 导出高亮提取相关函数
-pub use highlight::{derive_highlight_terms, extract_highlights_from_query};
 
 #[cfg(test)]
 mod tests;
