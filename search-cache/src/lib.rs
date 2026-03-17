@@ -22,7 +22,7 @@ pub use metadata_cache::*;
 pub use name_index::*;
 pub use persistent::*;
 pub use search_iterator::{SearchIterator, SearchBatch, IteratorState};
-pub use prefetch_thread::{PrefetchState, PrefetchMessage, start_prefetch_thread_rwlock};
+pub use prefetch_thread::{PrefetchState, PrefetchMessage};
 pub use segment::*;
 pub use slab::*;
 pub use slab_node::*;

@@ -19,6 +19,9 @@ use std::sync::mpsc::{self, Receiver, Sender};
 use std::time::Instant;
 use tracing::{debug};
 
+/// 搜索结果数量回调函数类型（私有，仅在模块内部使用）
+type SearchResultNumCallback = Arc<dyn Fn(i64) + Send + Sync>;
+
 /// 预取状态（用于后台预取线程管理）
 pub struct PrefetchState {
     /// 预取结果接收端
@@ -36,6 +39,8 @@ pub struct PrefetchState {
     pub cancelled: Arc<AtomicBool>,
     /// 后台遍历线程是否完成
     pub background_thread_done: Arc<AtomicBool>,
+    /// 搜索完成回调（通过 RwLock 允许后期设置）
+    pub on_search_complete: Arc<RwLock<Option<SearchResultNumCallback>>>,
 }
 
 /// 预取消息类型
@@ -55,6 +60,7 @@ impl PrefetchState {
         handle: std::thread::JoinHandle<()>,
         cancelled: Arc<AtomicBool>,
         background_thread_done: Arc<AtomicBool>,
+        on_search_complete: Arc<RwLock<Option<SearchResultNumCallback>>>,
     ) -> Self {
         Self {
             receiver,
@@ -64,6 +70,7 @@ impl PrefetchState {
             buffer_pos: 0,
             cancelled,
             background_thread_done,
+            on_search_complete,
         }
     }
 
@@ -90,6 +97,7 @@ pub fn start_prefetch_thread_rwlock(
     options: SearchOptions,
     batch_size: usize,
     cancel_token: CancellationToken,
+    on_search_complete: Arc<RwLock<Option<SearchResultNumCallback>>>,
 ) -> PrefetchState {
     // 锁定缓存获取必要信息
     let cache_guard = shared_cache.read().unwrap();
@@ -105,7 +113,7 @@ pub fn start_prefetch_thread_rwlock(
     let root_index = cache_guard.file_nodes.root();
 
     debug!(
-        "Prefetch thread: query='{}', total_nodes={}, batch_size={}",
+        "Prefetch thread started for iterator: query='{}', total_nodes={}, batch_size={}",
         query, total_nodes, batch_size
     );
 
@@ -121,6 +129,9 @@ pub fn start_prefetch_thread_rwlock(
     // Sender 可以克隆，克隆的发送者都发送到同一个通道
     let tx_for_thread = tx.clone();
 
+    // 克隆回调存储，以便在后台线程和 PrefetchState 中共享
+    let on_search_complete_clone = Arc::clone(&on_search_complete);
+
     let handle = std::thread::spawn(move || {
         debug!("Prefetch thread started for iterator");
         let visit_time = Instant::now();
@@ -129,6 +140,7 @@ pub fn start_prefetch_thread_rwlock(
         let mut current_pos = 0;
         let mut batch_buffer = Vec::with_capacity(batch_size);
         let mut last_log_pos = 0;
+        let mut matched_count = 0;
 
         loop {
             // 检查取消
@@ -137,6 +149,11 @@ pub fn start_prefetch_thread_rwlock(
             {
                 debug!("Prefetch thread cancelled at pos={}", current_pos);
                 let _ = tx_for_thread.send(PrefetchMessage::Cancelled);
+                // 调用回调通知搜索结果数量
+                let callback_guard = on_search_complete_clone.read().unwrap();
+                if let Some(ref callback) = *callback_guard {
+                    callback(matched_count as i64);
+                }
                 break;
             }
 
@@ -147,7 +164,12 @@ pub fn start_prefetch_thread_rwlock(
                     let _ = tx_for_thread.send(PrefetchMessage::Batch(batch_buffer));
                 }
                 let _ = tx_for_thread.send(PrefetchMessage::Done);
-                debug!("Prefetch thread completed, total_pos={}", current_pos);
+                debug!("Prefetch thread completed, total_pos={}, matched={}", current_pos, matched_count);
+                // 调用回调通知搜索结果数量
+                let callback_guard = on_search_complete_clone.read().unwrap();
+                if let Some(ref callback) = *callback_guard {
+                    callback(matched_count as i64);
+                }
                 // 标记后台线程完成
                 background_thread_done_clone.store(true, Ordering::Relaxed);
                 break;
@@ -166,12 +188,13 @@ pub fn start_prefetch_thread_rwlock(
                 let node_name: &str = node.name();
                 if match_node(&optimized.expr, node_name, options.case_insensitive) {
                     batch_buffer.push(current_index);
+                    matched_count += 1;
                 }
                 current_pos += 1;
 
                 // 每遍历 10 万个节点打印一次进度
                 if current_pos - last_log_pos >= 100000 {
-                    debug!("Prefetch thread progress: pos={}/{}, matched: {}", current_pos, total_nodes, batch_buffer.len());
+                    debug!("Prefetch thread progress: pos={}/{}, matched: {}", current_pos, total_nodes, matched_count);
                     last_log_pos = current_pos;
                 }
             }
@@ -200,7 +223,12 @@ pub fn start_prefetch_thread_rwlock(
                     let _ = tx_for_thread.send(PrefetchMessage::Batch(batch_buffer));
                 }
                 let _ = tx_for_thread.send(PrefetchMessage::Done);
-                debug!("Prefetch thread completed, total_pos={}", current_pos);
+                debug!("Prefetch thread completed, total_pos={}, matched={}", current_pos, matched_count);
+                // 调用回调通知搜索结果数量
+                let callback_guard = on_search_complete_clone.read().unwrap();
+                if let Some(ref callback) = *callback_guard {
+                    callback(matched_count as i64);
+                }
                 // 标记后台线程完成
                 background_thread_done_clone.store(true, Ordering::Relaxed);
                 break;
@@ -209,7 +237,7 @@ pub fn start_prefetch_thread_rwlock(
         debug!("Prefetch thread search time: {:?}", visit_time.elapsed());
     });
 
-    PrefetchState::new(rx, tx, handle, cancelled_clone, background_thread_done)
+    PrefetchState::new(rx, tx, handle, cancelled_clone, background_thread_done, on_search_complete)
 }
 
 /// 辅助函数：匹配节点（用于后台线程）

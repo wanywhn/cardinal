@@ -18,6 +18,9 @@ use std::sync::{Arc, RwLock};
 use std::time::Duration;
 use tracing::info;
 
+/// 搜索结果数量回调函数类型
+type SearchResultNumCallback = Arc<dyn Fn(i64) + Send + Sync>;
+
 /// 搜索迭代器状态
 #[derive(Debug, Clone)]
 pub struct IteratorState {
@@ -73,13 +76,20 @@ impl SearchIterator {
     /// 纯后台遍历模式：
     /// - 后台线程遍历文件树，通过通道发送结果
     /// - next_batch 从通道接收结果
-    pub fn new_with_rwlock(
+    ///
+    /// # 参数
+    /// - `on_search_complete`: 搜索完成回调函数，当搜索完成或被取消时调用，传入搜索结果数量
+    pub fn new_with_rwlock<F>(
         shared_cache: Arc<RwLock<SearchCache>>,
         query: &str,
         _options: SearchOptions,
         batch_size: usize,
         cancel_token: CancellationToken,
-    ) -> Result<Self, anyhow::Error> {
+        on_search_complete: F,
+    ) -> Result<Self, anyhow::Error>
+    where
+        F: Fn(i64) + Send + Sync + 'static,
+    {
         // 锁定缓存获取必要信息（使用读锁，因为初始化不需要修改）
         let cache_guard = shared_cache.read().unwrap();
 
@@ -94,6 +104,9 @@ impl SearchIterator {
         // 释放锁后再启动后台线程
         drop(cache_guard);
 
+        // 创建回调存储
+        let on_search_complete: Arc<RwLock<Option<SearchResultNumCallback>>> = Arc::new(RwLock::new(Some(Arc::new(on_search_complete))));
+
         // 启动后台遍历线程
         let prefetch_state = start_prefetch_thread_rwlock(
             shared_cache,
@@ -101,6 +114,7 @@ impl SearchIterator {
             _options,
             batch_size,
             cancel_token,
+            Arc::clone(&on_search_complete),
         );
 
         Ok(Self {
@@ -260,6 +274,7 @@ mod tests {
             SearchOptions::default(),
             10,
             CancellationToken::noop(),
+            |_| {}, // 空回调
         );
 
         assert!(iterator.is_ok());
@@ -279,6 +294,7 @@ mod tests {
             SearchOptions::default(),
             10,
             CancellationToken::noop(),
+            |_| {}, // 空回调
         ).unwrap();
 
         // 第一批获取 - 应该能获取到至少 1 个结果
@@ -297,6 +313,7 @@ mod tests {
             SearchOptions::default(),
             10,
             CancellationToken::noop(),
+            |_| {}, // 空回调
         ).unwrap();
 
         let batch = iterator.next_batch(10);
