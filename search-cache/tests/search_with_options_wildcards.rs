@@ -1,6 +1,7 @@
-use search_cache::{SearchCache, SearchOptions, SlabIndex};
+use search_cache::{SearchCache, SearchOptions, SlabIndex, SearchIterator};
 use search_cancel::CancellationToken;
 use std::fs;
+use std::sync::{Arc, RwLock};
 use tempdir::TempDir;
 
 fn guard_indices(result: Result<search_cache::SearchOutcome, anyhow::Error>) -> Vec<SlabIndex> {
@@ -8,6 +9,33 @@ fn guard_indices(result: Result<search_cache::SearchOutcome, anyhow::Error>) -> 
         .expect("search should succeed")
         .nodes
         .expect("noop cancellation token should not cancel")
+}
+
+/// 从 SearchIterator 收集所有索引（用于测试）
+fn collect_iterator_indices(
+    cache_arc: &Arc<RwLock<SearchCache>>,
+    query: &str,
+    options: SearchOptions,
+    batch_size: usize,
+) -> Vec<SlabIndex> {
+    let mut iterator = SearchIterator::new_with_rwlock(
+        Arc::clone(cache_arc),
+        query,
+        options,
+        batch_size,
+        CancellationToken::noop(),
+        |_| {}, // 空回调
+    ).expect("iterator creation should succeed");
+
+    let mut all_indices = Vec::new();
+    loop {
+        let batch = iterator.next_batch(100);
+        all_indices.extend(batch.indices);
+        if batch.search_completed || !batch.has_more {
+            break;
+        }
+    }
+    all_indices
 }
 
 #[test]
@@ -29,6 +57,15 @@ fn single_segment_wildcard_complex_pattern_case_sensitive() {
     // Should match only the exact lowercase path with the pattern anchored start 'foo'
     assert_eq!(nodes.len(), 1);
     assert!(nodes[0].path.ends_with("foo_alpha_bar.txt"));
+
+    // Iterator version test
+    let cache_arc = Arc::new(RwLock::new(cache));
+    let iter_indices = collect_iterator_indices(&cache_arc, "foo*alpha*.txt", opts, 10);
+    let mut cache_guard = cache_arc.write().unwrap();
+    let iter_nodes = cache_guard.expand_file_nodes(&iter_indices);
+    drop(cache_guard);
+    assert_eq!(iter_nodes.len(), 1, "Iterator should match search_with_options");
+    assert!(iter_nodes[0].path.ends_with("foo_alpha_bar.txt"));
 }
 
 #[test]
@@ -53,6 +90,18 @@ fn single_segment_wildcard_complex_pattern_case_insensitive() {
     );
     // Uppercase variant may be excluded depending on segmentation behavior; ensure at least one match.
     assert!(!nodes.is_empty());
+
+    // Iterator version test
+    let cache_arc = Arc::new(RwLock::new(cache));
+    let iter_indices = collect_iterator_indices(&cache_arc, "foo*bar*.txt", opts, 10);
+    let mut cache_guard = cache_arc.write().unwrap();
+    let iter_nodes = cache_guard.expand_file_nodes(&iter_indices);
+    drop(cache_guard);
+    assert!(!iter_nodes.is_empty(), "Iterator should not be empty");
+    assert!(
+        iter_nodes.iter().any(|n| n.path.ends_with("foobar_bar.txt")),
+        "Iterator should match lowercase variant"
+    );
 }
 
 #[test]
@@ -73,6 +122,16 @@ fn leading_wildcard_matches_suffix() {
     assert_eq!(nodes.len(), 2);
     assert!(nodes.iter().any(|n| n.path.ends_with("foo_beta.txt")));
     assert!(nodes.iter().any(|n| n.path.ends_with("beta.txt")));
+
+    // Iterator version test
+    let cache_arc = Arc::new(RwLock::new(cache));
+    let iter_indices = collect_iterator_indices(&cache_arc, "*beta.txt", opts, 10);
+    let mut cache_guard = cache_arc.write().unwrap();
+    let iter_nodes = cache_guard.expand_file_nodes(&iter_indices);
+    drop(cache_guard);
+    assert_eq!(iter_nodes.len(), 2, "Iterator should match search_with_options");
+    assert!(iter_nodes.iter().any(|n| n.path.ends_with("foo_beta.txt")));
+    assert!(iter_nodes.iter().any(|n| n.path.ends_with("beta.txt")));
 }
 
 #[test]
@@ -94,6 +153,16 @@ fn trailing_wildcard_matches_prefix() {
     assert_eq!(nodes.len(), 2);
     assert!(nodes.iter().any(|n| n.path.ends_with("alpha_beta.txt")));
     assert!(nodes.iter().any(|n| n.path.ends_with("alpha.txt")));
+
+    // Iterator version test
+    let cache_arc = Arc::new(RwLock::new(cache));
+    let iter_indices = collect_iterator_indices(&cache_arc, "alpha*", opts, 10);
+    let mut cache_guard = cache_arc.write().unwrap();
+    let iter_nodes = cache_guard.expand_file_nodes(&iter_indices);
+    drop(cache_guard);
+    assert_eq!(iter_nodes.len(), 2, "Iterator should match search_with_options");
+    assert!(iter_nodes.iter().any(|n| n.path.ends_with("alpha_beta.txt")));
+    assert!(iter_nodes.iter().any(|n| n.path.ends_with("alpha.txt")));
 }
 
 #[test]
@@ -115,6 +184,16 @@ fn question_mark_single_character() {
     assert_eq!(nodes.len(), 2);
     assert!(nodes.iter().any(|n| n.path.ends_with("file1.txt")));
     assert!(nodes.iter().any(|n| n.path.ends_with("file2.txt")));
+
+    // Iterator version test
+    let cache_arc = Arc::new(RwLock::new(cache));
+    let iter_indices = collect_iterator_indices(&cache_arc, "file?.txt", opts, 10);
+    let mut cache_guard = cache_arc.write().unwrap();
+    let iter_nodes = cache_guard.expand_file_nodes(&iter_indices);
+    drop(cache_guard);
+    assert_eq!(iter_nodes.len(), 2, "Iterator should match search_with_options");
+    assert!(iter_nodes.iter().any(|n| n.path.ends_with("file1.txt")));
+    assert!(iter_nodes.iter().any(|n| n.path.ends_with("file2.txt")));
 }
 
 #[test]
@@ -142,6 +221,20 @@ fn star_only_matches_all_files() {
     let unique_files: std::collections::HashSet<_> =
         file_hits.iter().map(|n| n.path.clone()).collect();
     assert!(unique_files.len() >= 3);
+
+    // Iterator version test
+    let cache_arc = Arc::new(RwLock::new(cache));
+    let iter_indices = collect_iterator_indices(&cache_arc, "*", opts, 10);
+    let mut cache_guard = cache_arc.write().unwrap();
+    let iter_nodes = cache_guard.expand_file_nodes(&iter_indices);
+    drop(cache_guard);
+    let iter_file_hits: Vec<_> = iter_nodes
+        .iter()
+        .filter(|n| n.path.file_name().is_some())
+        .collect();
+    assert!(iter_file_hits.iter().any(|n| n.path.ends_with("one.txt")));
+    assert!(iter_file_hits.iter().any(|n| n.path.ends_with("two.txt")));
+    assert!(iter_file_hits.iter().any(|n| n.path.ends_with("three.log")));
 }
 
 #[test]
@@ -168,6 +261,20 @@ fn multi_segment_wildcard_intersection_case_sensitive() {
     assert!(nodes.iter().any(|n| n.path.ends_with("alpha_beta.txt")));
     assert!(
         nodes
+            .iter()
+            .any(|n| n.path.ends_with("alphaGamma_beta.txt"))
+    );
+
+    // Iterator version test
+    let cache_arc = Arc::new(RwLock::new(cache));
+    let iter_indices = collect_iterator_indices(&cache_arc, "alpha* *beta*.txt", opts, 10);
+    let mut cache_guard = cache_arc.write().unwrap();
+    let iter_nodes = cache_guard.expand_file_nodes(&iter_indices);
+    drop(cache_guard);
+    assert_eq!(iter_nodes.len(), 2, "Iterator should match search_with_options");
+    assert!(iter_nodes.iter().any(|n| n.path.ends_with("alpha_beta.txt")));
+    assert!(
+        iter_nodes
             .iter()
             .any(|n| n.path.ends_with("alphaGamma_beta.txt"))
     );
@@ -198,6 +305,19 @@ fn multi_segment_wildcard_intersection_case_insensitive() {
         assert!(name.to_ascii_lowercase().contains("alpha"));
         assert!(name.to_ascii_lowercase().contains("beta"));
     }
+
+    // Iterator version test
+    let cache_arc = Arc::new(RwLock::new(cache));
+    let iter_indices = collect_iterator_indices(&cache_arc, "alpha* *beta*.txt", opts, 10);
+    let mut cache_guard = cache_arc.write().unwrap();
+    let iter_nodes = cache_guard.expand_file_nodes(&iter_indices);
+    drop(cache_guard);
+    assert!(!iter_nodes.is_empty(), "Iterator should not be empty");
+    for n in &iter_nodes {
+        let name = n.path.file_name().unwrap().to_string_lossy();
+        assert!(name.to_ascii_lowercase().contains("alpha"), "Iterator should contain alpha");
+        assert!(name.to_ascii_lowercase().contains("beta"), "Iterator should contain beta");
+    }
 }
 
 #[test]
@@ -219,4 +339,14 @@ fn complex_mixed_wildcards_and_question_mark() {
     assert_eq!(nodes.len(), 2); // aXXbYcZ.txt (bY) and a_b_cx.txt (b_ cx) match, abYYc.txt missing "b?" single char separation before c?
     assert!(nodes.iter().any(|n| n.path.ends_with("aXXbYcZ.txt")));
     assert!(nodes.iter().any(|n| n.path.ends_with("a_b_cx.txt")));
+
+    // Iterator version test
+    let cache_arc = Arc::new(RwLock::new(cache));
+    let iter_indices = collect_iterator_indices(&cache_arc, "a*b?c*.txt", opts, 10);
+    let mut cache_guard = cache_arc.write().unwrap();
+    let iter_nodes = cache_guard.expand_file_nodes(&iter_indices);
+    drop(cache_guard);
+    assert_eq!(iter_nodes.len(), 2, "Iterator should match search_with_options");
+    assert!(iter_nodes.iter().any(|n| n.path.ends_with("aXXbYcZ.txt")));
+    assert!(iter_nodes.iter().any(|n| n.path.ends_with("a_b_cx.txt")));
 }
