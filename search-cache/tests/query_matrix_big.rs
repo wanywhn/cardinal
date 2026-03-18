@@ -2,9 +2,37 @@
 //! Builds a small virtual filesystem and runs many search permutations.
 //! Intentionally verbose for line-count; focuses on correctness + non-panicking behavior.
 
-use search_cache::{SearchCache, SearchOptions};
+use search_cache::{SearchCache, SearchOptions, SlabIndex, SearchIterator};
 use search_cancel::CancellationToken;
+use std::sync::{Arc, RwLock};
 use tempdir::TempDir;
+
+/// 从 SearchIterator 收集所有索引（用于测试）
+fn collect_iterator_indices(
+    cache_arc: &Arc<RwLock<SearchCache>>,
+    query: &str,
+    options: SearchOptions,
+    batch_size: usize,
+) -> Vec<SlabIndex> {
+    let mut iterator = SearchIterator::new_with_rwlock(
+        Arc::clone(cache_arc),
+        query,
+        options,
+        batch_size,
+        CancellationToken::noop(),
+        |_| {}, // 空回调
+    ).expect("iterator creation should succeed");
+
+    let mut all_indices = Vec::new();
+    loop {
+        let batch = iterator.next_batch(100);
+        all_indices.extend(batch.indices);
+        if batch.search_completed || !batch.has_more {
+            break;
+        }
+    }
+    all_indices
+}
 
 fn build_cache() -> SearchCache {
     let temp_dir = TempDir::new("query_matrix_big").unwrap();
@@ -149,6 +177,90 @@ fn large_query_matrix() {
     }
 }
 
+/// Iterator 版本的 large_query_matrix 测试
+#[test]
+fn large_query_matrix_iterator() {
+    let cache = build_cache();
+    let cache_arc = Arc::new(RwLock::new(cache));
+    let matrix = [
+        // Simple words
+        "README",
+        "README.md",
+        "LICENSE",
+        "Cargo",
+        "main",
+        "lib",
+        "config",
+        "Dockerfile",
+        // Extensions
+        "ext:rs",
+        "ext:tsx",
+        "ext:md",
+        "ext:png;jpg;gif",
+        "ext:png ; jpg ; gif",
+        // Folder filters
+        "folder:src",
+        "folder:tests",
+        "folder:assets",
+        "parent:src",
+        "infolder:src",
+        "parent:./src",
+        // Boolean mixes
+        "src lib | README",
+        "src lib | README.md",
+        "src | tests lib",
+        "src tests | assets",
+        "src util | components",
+        "src components | tests",
+        "src components | README",
+        "README | src",
+        // NOT forms
+        "src ! tests",
+        "src ! assets",
+        "src ! README",
+        "src ! README.md",
+        "README ! src",
+        "src ! ext:md",
+        // Wildcards
+        "*.rs",
+        "*.tsx",
+        "*.md",
+        "*.png",
+        "*.jpg",
+        "*.gif",
+        "*main*",
+        "*lib*",
+        "*config*",
+        // Multi-list ext
+        "ext:rs;md",
+        "ext:rs;tsx;md",
+        "ext:png;jpg",
+        "ext:png;jpg;gif",
+        "ext:png; gif ; jpg",
+        // Precedence
+        "src lib | tests",
+        "src | lib tests",
+        "src | lib | tests",
+        "src lib tests README",
+        // Parent + infolder nuance
+        "parent:src *.rs",
+        "infolder:src *.rs",
+        "parent:src *.tsx",
+        "infolder:src *.tsx",
+        // Chained filters & words
+        "folder:src ext:rs lib",
+        "folder:src ext:rs main",
+        "folder:src ext:tsx components",
+        // Many negations
+        "src ! README ! LICENSE ! Cargo.toml",
+        "src ! README ! LICENSE",
+        "src ! README ! lib",
+    ];
+    for q in matrix {
+        let _ = collect_iterator_indices(&cache_arc, q, SearchOptions::default(), 10);
+    }
+}
+
 #[test]
 fn wildcard_vs_phrase_behavior_matrix() {
     let mut cache = build_cache();
@@ -180,6 +292,18 @@ fn case_insensitive_option_matrix() {
         .unwrap()
         .len();
     assert!(insensitive >= sensitive);
+
+    // Iterator version test
+    let cache_arc = Arc::new(RwLock::new(cache));
+    let opts = SearchOptions {
+        case_insensitive: true,
+    };
+    let iter_insensitive = collect_iterator_indices(&cache_arc, "readme.md", opts, 10).len();
+    let opts = SearchOptions {
+        case_insensitive: false,
+    };
+    let iter_sensitive = collect_iterator_indices(&cache_arc, "readme.md", opts, 10).len();
+    assert!(iter_insensitive >= iter_sensitive, "Iterator: case insensitive should match >= case sensitive");
 }
 
 #[test]
@@ -193,5 +317,24 @@ fn cancellation_large_iteration() {
     assert!(
         result.nodes.is_none(),
         "Cancellation should propagate and yield None"
+    );
+
+    // Iterator version test
+    let cache_arc = Arc::new(RwLock::new(cache));
+    let cancel_token = CancellationToken::new(10001);
+    let _later = CancellationToken::new(10002); // cancel token
+    let mut iterator = SearchIterator::new_with_rwlock(
+        Arc::clone(&cache_arc),
+        "src lib tests",
+        SearchOptions::default(),
+        10,
+        cancel_token,
+        |_| {},
+    ).expect("iterator creation should succeed");
+
+    let batch = iterator.next_batch(100);
+    assert!(
+        batch.indices.is_empty(),
+        "Iterator: Cancellation should propagate and yield empty results"
     );
 }
