@@ -36,10 +36,32 @@ bitflags! {
 impl EventFlag {
     pub fn from_inotify_mask(event: nix::sys::inotify::InotifyEvent) -> Self {
         let mut flags = EventFlag::empty();
-        
-        if event.mask.contains(nix::sys::inotify::AddWatchFlags::IN_ACCESS) {
-            flags.insert(EventFlag::ItemModified); // Map access to modified
+
+        // 移除 IN_ACCESS 映射，避免索引扫描时读取元数据触发事件循环
+        // 原代码: if event.mask.contains(IN_ACCESS) { flags.insert(ItemModified); }
+
+        // 检查是否有任何有意义的事件
+        let has_meaningful_event =
+            event.mask.contains(nix::sys::inotify::AddWatchFlags::IN_MODIFY) ||
+            event.mask.contains(nix::sys::inotify::AddWatchFlags::IN_ATTRIB) ||
+            event.mask.contains(nix::sys::inotify::AddWatchFlags::IN_CLOSE_WRITE) ||
+            event.mask.contains(nix::sys::inotify::AddWatchFlags::IN_MOVED_FROM) ||
+            event.mask.contains(nix::sys::inotify::AddWatchFlags::IN_MOVED_TO) ||
+            event.mask.contains(nix::sys::inotify::AddWatchFlags::IN_CREATE) ||
+            event.mask.contains(nix::sys::inotify::AddWatchFlags::IN_DELETE) ||
+            event.mask.contains(nix::sys::inotify::AddWatchFlags::IN_DELETE_SELF) ||
+            event.mask.contains(nix::sys::inotify::AddWatchFlags::IN_MOVE_SELF);
+
+        // 只有有意义的事件才设置类型标志
+        if has_meaningful_event {
+            if event.mask.contains(nix::sys::inotify::AddWatchFlags::IN_ISDIR) {
+                flags.insert(EventFlag::ItemIsDir);
+            } else {
+                flags.insert(EventFlag::ItemIsFile);
+            }
         }
+        
+        // 设置具体的事件类型
         if event.mask.contains(nix::sys::inotify::AddWatchFlags::IN_MODIFY) {
             flags.insert(EventFlag::ItemModified);
         }
@@ -67,12 +89,7 @@ impl EventFlag {
         if event.mask.contains(nix::sys::inotify::AddWatchFlags::IN_MOVE_SELF) {
             flags.insert(EventFlag::ItemRenamed);
         }
-        if event.mask.contains(nix::sys::inotify::AddWatchFlags::IN_ISDIR) {
-            flags.insert(EventFlag::ItemIsDir);
-        } else {
-            flags.insert(EventFlag::ItemIsFile);
-        }
-        
+
         flags
     }
 }
@@ -115,13 +132,16 @@ impl EventFlag {
     }
 
     pub fn scan_type(&self) -> ScanType {
-        let event_type = self.event_type();
-        let is_dir = matches!(event_type, EventType::Dir);
-        if self.contains(EventFlag::HistoryDone) | self.contains(EventFlag::EventIdsWrapped) {
+        // 空标志或无意义事件返回 Nop
+        if self.is_empty() ||
+           self.contains(EventFlag::HistoryDone) ||
+           self.contains(EventFlag::EventIdsWrapped) {
             ScanType::Nop
         } else if self.contains(EventFlag::RootChanged) {
             ScanType::ReScan
         } else {
+            let event_type = self.event_type();
+            let is_dir = matches!(event_type, EventType::Dir);
             // Strange event, doesn't know when it happens, processing it using a generic way
             // e.g. new event: fs_event=FsEvent { path: "/.docid/16777229/changed/782/src=0,dst=41985052", flag: kFSEventStreamEventFlagNone, id: 471533015 }
             if is_dir {
