@@ -192,39 +192,83 @@ impl EventWatcher {
     }
 }
 
-#[cfg(all(test, target_os = "macos"))]
+#[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{EventFlag, utils::current_event_id};
+    use crate::utils::current_event_id;
     use crossbeam_channel::RecvTimeoutError;
     use std::time::{Duration, Instant};
     use tempfile::tempdir;
 
-    #[test]
-    fn event_watcher_on_non_existent_path() {
-        let (_dev, watcher) = EventWatcher::spawn("/e mm".to_string(), current_event_id(), 0.05);
-        let initial_events = watcher.recv().unwrap();
-        assert!(initial_events.len() == 1);
-        assert!(initial_events[0].flag.contains(EventFlag::HistoryDone));
+    // ========================================================================
+    // macOS 专属测试
+    // ========================================================================
+    #[cfg(target_os = "macos")]
+    mod macos_tests {
+        use super::*;
+        use crate::EventFlag;
 
-        let deadline = Instant::now() + Duration::from_secs(2);
-        let mut received_any = false;
-        while Instant::now() < deadline {
-            match watcher.recv_timeout(Duration::from_millis(200)) {
-                Ok(_batch) => {
-                    received_any = true;
-                    break;
+        #[test]
+        fn event_watcher_on_non_existent_path() {
+            let (_dev, watcher) = EventWatcher::spawn("/e mm".to_string(), current_event_id(), 0.05);
+            let initial_events = watcher.recv().unwrap();
+            assert!(initial_events.len() == 1);
+            assert!(initial_events[0].flag.contains(EventFlag::HistoryDone));
+
+            let deadline = Instant::now() + Duration::from_secs(2);
+            let mut received_any = false;
+            while Instant::now() < deadline {
+                match watcher.recv_timeout(Duration::from_millis(200)) {
+                    Ok(_batch) => {
+                        received_any = true;
+                        break;
+                    }
+                    Err(RecvTimeoutError::Timeout) => continue,
+                    Err(RecvTimeoutError::Disconnected) => break,
                 }
-                Err(RecvTimeoutError::Timeout) => continue,
-                Err(RecvTimeoutError::Disconnected) => break,
             }
-        }
 
-        drop(watcher);
-        assert!(
-            !received_any,
-            "event watcher on non-existent path should not deliver events"
-        );
+            drop(watcher);
+            assert!(
+                !received_any,
+                "event watcher on non-existent path should not deliver events"
+            );
+        }
+    }
+
+    // ========================================================================
+    // Linux 专属测试
+    // ========================================================================
+    #[cfg(target_os = "linux")]
+    mod linux_tests {
+        use super::*;
+
+        #[test]
+        fn event_watcher_on_non_existent_path() {
+            // Linux inotify 对不存在路径会添加 watch 失败
+            // 当前实现会打印错误但仍会创建 EventWatcher
+            // 测试应验证不会收到任何事件
+            let (_dev, watcher) = EventWatcher::spawn("/nonexistent_path_12345".to_string(), 0, 0.05);
+
+            // 不应该收到任何事件（因为 inotify watch 添加失败）
+            let deadline = Instant::now() + Duration::from_secs(1);
+            let mut received_any = false;
+            while Instant::now() < deadline {
+                match watcher.recv_timeout(Duration::from_millis(200)) {
+                    Ok(_batch) => {
+                        received_any = true;
+                        break;
+                    }
+                    Err(RecvTimeoutError::Timeout) => continue,
+                    Err(RecvTimeoutError::Disconnected) => break,
+                }
+            }
+
+            assert!(
+                !received_any,
+                "event watcher on non-existent path should not deliver events"
+            );
+        }
     }
 
     #[test]

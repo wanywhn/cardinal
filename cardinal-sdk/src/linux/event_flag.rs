@@ -1,5 +1,8 @@
 use bitflags::bitflags;
 
+// Linux 事件标志定义
+// 注意：这些标志是为了与 macOS FSEvents 兼容而定义的。
+// Linux 使用 inotify 实现，某些标志（如 Hardlink、Cloned）在 inotify 中没有对应概念。
 bitflags! {
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     pub struct EventFlag: u32 {
@@ -8,7 +11,7 @@ bitflags! {
         const UserDropped = 1 << 1;
         const KernelDropped = 1 << 2;
         const EventIdsWrapped = 1 << 3;
-        const HistoryDone = 1 << 4;
+        const HistoryDone = 1 << 4;  // 在 Linux 下不会产生此事件
         const RootChanged = 1 << 5;
         const Mount = 1 << 6;
         const Unmount = 1 << 7;
@@ -17,16 +20,16 @@ bitflags! {
         const ItemInodeMetaMod = 1 << 10;
         const ItemRenamed = 1 << 11;
         const ItemModified = 1 << 12;
-        const ItemFinderInfoMod = 1 << 13;
+        const ItemFinderInfoMod = 1 << 13;  // 在 Linux 下不会产生此事件
         const ItemChangeOwner = 1 << 14;
         const ItemXattrMod = 1 << 15;
         const ItemIsFile = 1 << 16;
         const ItemIsDir = 1 << 17;
         const ItemIsSymlink = 1 << 18;
-        const OwnEvent = 1 << 19;
-        const IsHardlink = 1 << 20;
-        const IsLastHardlink = 1 << 21;
-        const Cloned = 1 << 22;
+        const OwnEvent = 1 << 19;  // 在 Linux 下不会产生此事件
+        const IsHardlink = 1 << 20;  // 在 Linux 下不会产生此事件
+        const IsLastHardlink = 1 << 21;  // 在 Linux 下不会产生此事件
+        const Cloned = 1 << 22;  // 在 Linux 下不会产生此事件
     }
 }
 
